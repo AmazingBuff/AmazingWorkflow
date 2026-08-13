@@ -38,10 +38,14 @@ function expectedName(role: AllowedRole): string {
 }
 
 function removeQuotes(value: string): string {
-	if (value.length >= 2 && ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))) {
-		return value.slice(1, -1).trim();
+	const trimmed = value.trim();
+	if (
+		trimmed.length >= 2 &&
+		((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'")))
+	) {
+		return trimmed.slice(1, -1).trim();
 	}
-	return value.trim();
+	return trimmed;
 }
 
 function splitFrontmatter(content: string): { fields: Map<string, string>; body: string } | null {
