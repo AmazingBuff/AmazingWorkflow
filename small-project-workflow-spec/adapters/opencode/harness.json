@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "adapter": {
+    "id": "opencode",
+    "display_name": "OpenCode",
+    "source_only": true,
+    "description": "Source templates for a permission-bounded OpenCode implementation of the small-project workflow."
+  },
+  "template_engine": {
+    "syntax": "literal {{NAME}} replacement",
+    "variables": {
+      "STRONG_MODEL": {
+        "required": true,
+        "description": "An available model for decisions, planning, review, and test judgment."
+      },
+      "STRONG_VARIANT": {
+        "required": true,
+        "description": "A variant supported by STRONG_MODEL."
+      },
+      "EXECUTION_MODEL": {
+        "required": true,
+        "description": "An available model for bounded implementation, test execution, and reporting."
+      },
+      "EXECUTION_VARIANT": {
+        "required": true,
+        "description": "A variant supported by EXECUTION_MODEL."
+      }
+    },
+    "rules": [
+      "Replace every required token before writing an output file.",
+      "Reject an empty value or an unresolved {{...}} token.",
+      "Do not invent, substitute, or silently downgrade a model or variant."
+    ]
+  },
+  "outputs": [
+    {
+      "template": "agents/small-project-orchestrator.md.tmpl",
+      "destination": ".opencode/agents/small-project-orchestrator.md",
+      "role": "primary-orchestrator"
+    },
+    {
+      "template": "agents/small-project-decision-planner.md.tmpl",
+      "destination": ".opencode/agents/small-project-decision-planner.md",
+      "role": "decision-planner"
+    },
+    {
+      "template": "agents/small-project-implementer.md.tmpl",
+      "destination": ".opencode/agents/small-project-implementer.md",
+      "role": "implementer"
+    },
+    {
+      "template": "agents/small-project-reviewer.md.tmpl",
+      "destination": ".opencode/agents/small-project-reviewer.md",
+      "role": "isolated-reviewer"
+    },
+    {
+      "template": "agents/small-project-test-planner.md.tmpl",
+      "destination": ".opencode/agents/small-project-test-planner.md",
+      "role": "test-planner-and-judge"
+    },
+    {
+      "template": "agents/small-project-test-runner.md.tmpl",
+      "destination": ".opencode/agents/small-project-test-runner.md",
+      "role": "test-runner"
+    },
+    {
+      "template": "agents/small-project-reporter.md.tmpl",
+      "destination": ".opencode/agents/small-project-reporter.md",
+      "role": "evidence-reporter"
+    },
+    {
+      "source": "commands/small-project.md",
+      "destination": ".opencode/commands/small-project.md",
+      "role": "workflow-command"
+    }
+  ],
+  "runtime_contract": {
+    "skill_package": {
+      "required": true,
+      "source_layout": "SPEC.md plus skills/<skill-name>/SKILL.md",
+      "target_layout": ".opencode/skills/<skill-name>/SKILL.md plus .opencode/skills/small-project-workflow/references/SPEC.md",
+      "reason": "The installed workflow reads its authoritative specification from its own references/SPEC.md; preserve the complete skill package and the generated or copied reference."
+    },
+    "agent_routing": {
+      "primary": "small-project-orchestrator",
+      "subagents": [
+        "small-project-decision-planner",
+        "small-project-implementer",
+        "small-project-reviewer",
+        "small-project-test-planner",
+        "small-project-test-runner",
+        "small-project-reporter"
+      ],
+      "writing_rule": "Do not run more than one writing subagent against the same worktree at once."
+    },
+    "validation": [
+      "Each rendered agent has description, mode, model, variant, steps, and permission frontmatter.",
+      "Only the orchestrator may invoke Task, and it may invoke only small-project-* subagents.",
+      "Every agent permits only small-project-* skills.",
+      "The reviewer is read-only; the test runner denies edit and asks before bash."
+    ]
+  }
+}

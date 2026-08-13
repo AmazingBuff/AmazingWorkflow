@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Planning"
+  short_description: "Convert an approved solution into bounded implementation tasks"
+  default_prompt: "Use $small-project-planning to turn the approved solution into a modular, executable plan."
+policy:
+  allow_implicit_invocation: false

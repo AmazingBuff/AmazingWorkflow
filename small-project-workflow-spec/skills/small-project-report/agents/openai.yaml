@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Report"
+  short_description: "Summarize an accepted delivery from verified evidence."
+  default_prompt: "Use $small-project-report to summarize the accepted delivery from verified evidence."
+policy:
+  allow_implicit_invocation: false

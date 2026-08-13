@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Test Plan"
+  short_description: "Plan tests and classify execution results."
+  default_prompt: "Use $small-project-test-plan to plan or evaluate the current test cycle."
+policy:
+  allow_implicit_invocation: false

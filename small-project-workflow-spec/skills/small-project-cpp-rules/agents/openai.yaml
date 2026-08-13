@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project C++ Rules"
+  short_description: "Apply proportional C++ and CMake engineering rules."
+  default_prompt: "Use $small-project-cpp-rules to guide C++ implementation or review for this project."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "adapter": {
+    "id": "pi",
+    "display_name": "Pi",
+    "source_only": true,
+    "description": "Source templates and a project-scoped Pi subagent extension for the small-project workflow."
+  },
+  "template_engine": {
+    "syntax": "literal {{NAME}} replacement",
+    "variables": {
+      "STRONG_MODEL": {
+        "required": true,
+        "description": "An installed Pi model selector in provider/model-id form for decisions, review, and test planning."
+      },
+      "STRONG_THINKING": {
+        "required": true,
+        "description": "A thinking level accepted by the selected strong Pi model."
+      },
+      "EXECUTION_MODEL": {
+        "required": true,
+        "description": "An installed Pi model selector in provider/model-id form for bounded execution and reporting."
+      },
+      "EXECUTION_THINKING": {
+        "required": true,
+        "description": "A thinking level accepted by the selected execution Pi model."
+      }
+    },
+    "rules": [
+      "Replace every required token before writing an output file.",
+      "Reject empty values and unresolved {{...}} tokens.",
+      "Do not substitute a different provider, model, or thinking level when a configured capability is unavailable."
+    ]
+  },
+  "outputs": [
+    {
+      "template": "agents/small-project-decision.md.tmpl",
+      "destination": ".pi/agents/small-project-decision.md",
+      "role": "decision"
+    },
+    {
+      "template": "agents/small-project-implementer.md.tmpl",
+      "destination": ".pi/agents/small-project-implementer.md",
+      "role": "implementer"
+    },
+    {
+      "template": "agents/small-project-reviewer.md.tmpl",
+      "destination": ".pi/agents/small-project-reviewer.md",
+      "role": "reviewer"
+    },
+    {
+      "template": "agents/small-project-test-planner.md.tmpl",
+      "destination": ".pi/agents/small-project-test-planner.md",
+      "role": "test-planner"
+    },
+    {
+      "template": "agents/small-project-test-runner.md.tmpl",
+      "destination": ".pi/agents/small-project-test-runner.md",
+      "role": "test-runner"
+    },
+    {
+      "template": "agents/small-project-reporter.md.tmpl",
+      "destination": ".pi/agents/small-project-reporter.md",
+      "role": "reporter"
+    },
+    {
+      "source": "prompts/small-project.md",
+      "destination": ".pi/prompts/small-project.md",
+      "role": "workflow-entrypoint"
+    },
+    {
+      "source": "extensions/small-project-subagents/agents.ts",
+      "destination": ".pi/extensions/small-project-subagents/agents.ts",
+      "role": "project-agent-discovery"
+    },
+    {
+      "source": "extensions/small-project-subagents/index.ts",
+      "destination": ".pi/extensions/small-project-subagents/index.ts",
+      "role": "subagent-tool"
+    }
+  ],
+  "runtime_contract": {
+    "skill_package": {
+      "required": true,
+      "source_layout": "SPEC.md plus skills/<skill-name>/SKILL.md",
+      "target_layout": ".pi/skills/small-project-workflow/references/SPEC.md plus .pi/skills/<skill-name>/SKILL.md",
+      "reason": "The installed workflow must retain its authoritative SPEC.md at the workflow skill's references location and preserve the complete sibling skill package."
+    },
+    "agent_scope": "project",
+    "agent_directory": ".pi/agents",
+    "tool": {
+      "name": "small_project_subagent",
+      "modes": ["single"],
+      "allowed_roles": [
+        "decision",
+        "implementer",
+        "reviewer",
+        "test-planner",
+        "test-runner",
+        "reporter"
+      ],
+      "model_policy": "The extension validates the configured provider/model against Pi's model registry before spawning. It never falls back."
+    },
+    "validation": [
+      "Each rendered agent has name, description, tools, model, and thinking frontmatter.",
+      "The prompt, not a subagent definition, acts as the main-session orchestrator.",
+      "The extension discovers only .pi/agents in the current project hierarchy.",
+      "The extension invokes a separate Pi process with JSON, no-session, approval, model, thinking, tools, and appended system-prompt flags."
+    ]
+  }
+}

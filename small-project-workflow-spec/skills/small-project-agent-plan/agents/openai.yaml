@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Agent Plan"
+  short_description: "Assign model roles and task-packet boundaries."
+  default_prompt: "Use $small-project-agent-plan to establish the model and role map for this iteration."
+policy:
+  allow_implicit_invocation: false

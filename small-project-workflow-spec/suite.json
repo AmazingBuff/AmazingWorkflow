@@ -1,0 +1,28 @@
+{
+  "name": "small-project-workflow",
+  "version": "1.1.0",
+  "spec": "SPEC.md",
+  "skills": [
+    "small-project-workflow",
+    "small-project-agent-plan",
+    "small-project-requirements",
+    "small-project-planning",
+    "small-project-implement",
+    "small-project-review",
+    "small-project-test-plan",
+    "small-project-test-run",
+    "small-project-acceptance",
+    "small-project-feedback-analysis",
+    "small-project-report",
+    "small-project-code-contract",
+    "small-project-python-rules",
+    "small-project-cpp-rules"
+  ],
+  "roles": {
+    "decision_strong": { "isolated": true, "write": false },
+    "review_strong_isolated": { "isolated": true, "write": false },
+    "execution_bounded": { "isolated": true, "write": true },
+    "report_bounded": { "isolated": true, "write": false }
+  },
+  "supported_harnesses": ["codex", "opencode", "pi"]
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Workflow"
+  short_description: "Run the complete gated small-project delivery lifecycle."
+  default_prompt: "Use $small-project-workflow to start or continue this small project through its gated delivery lifecycle."
+policy:
+  allow_implicit_invocation: true

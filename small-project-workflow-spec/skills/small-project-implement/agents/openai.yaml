@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Implement"
+  short_description: "Implement an approved task or repair packet."
+  default_prompt: "Use $small-project-implement to implement the confirmed bounded task packet."
+policy:
+  allow_implicit_invocation: false

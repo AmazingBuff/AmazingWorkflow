@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Code Contract"
+  short_description: "Apply shared modularity and boundary-validation rules."
+  default_prompt: "Use $small-project-code-contract to apply the shared coding rules to this task."
+policy:
+  allow_implicit_invocation: false

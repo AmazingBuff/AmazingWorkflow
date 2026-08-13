@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Test Run"
+  short_description: "Execute approved tests and capture reproducible evidence."
+  default_prompt: "Use $small-project-test-run to execute the approved test plan and capture evidence."
+policy:
+  allow_implicit_invocation: false

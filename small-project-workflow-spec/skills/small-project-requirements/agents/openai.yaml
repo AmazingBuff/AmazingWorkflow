@@ -1,0 +1,6 @@
+interface:
+  display_name: "Small Project Requirements"
+  short_description: "Validate and confirm an initial or changed requirement."
+  default_prompt: "Use $small-project-requirements to validate and plan the current project requirement."
+policy:
+  allow_implicit_invocation: false
