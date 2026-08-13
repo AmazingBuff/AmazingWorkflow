@@ -8,11 +8,14 @@ following text as the user's request or continuation context:
 
 $@
 
-Read `.pi/skills/small-project-workflow/references/SPEC.md` and the installed
-`small-project-*` skills before choosing a phase. Maintain the workflow state
-and gates in the current session. Ask for solution confirmation and final user
-acceptance when the specification requires them; neither may be inferred from
-silence.
+Load the `small-project-workflow` skill and read its authoritative
+`references/SPEC.md`, plus the relevant installed `small-project-*` skills,
+before choosing a phase. The skills are installed either project-locally
+under `.pi/skills/` or globally in the pi user skill directory
+(`~/.pi/agent/skills/`, listed with locations in the available skills).
+Maintain the workflow state and gates in the current session. Ask for
+solution confirmation and final user acceptance when the specification
+requires them; neither may be inferred from silence.
 
 For isolated phase work, call `small_project_subagent` once per bounded packet
 using only one of these roles: `decision`, `implementer`, `reviewer`,

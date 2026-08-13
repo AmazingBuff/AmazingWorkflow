@@ -172,15 +172,17 @@ export default function (pi: ExtensionAPI) {
 			const role: AllowedRole = requestedRole;
 
 			if (!ctx.isProjectTrusted()) {
-				return capabilityFailure("project trust is required before loading .pi/agents", { role });
+				return capabilityFailure("project trust is required before loading workflow agents", { role });
 			}
 
 			const discovery = discoverProjectAgents(ctx.cwd);
 			const agent = discovery.agents.get(role);
 			if (!agent) {
-				return capabilityFailure(`project role ${JSON.stringify(role)} is not installed in .pi/agents`, {
+				return capabilityFailure(`role ${JSON.stringify(role)} is not installed (project .pi/agents or user-level agents)`, {
 					role,
 					projectAgentsDir: discovery.projectAgentsDir,
+					userAgentsDir: discovery.userAgentsDir,
+					agentScope: discovery.scope,
 					discoveryErrors: discovery.errors,
 				});
 			}
@@ -229,7 +231,7 @@ export default function (pi: ExtensionAPI) {
 				];
 				const run = await runPi(args, ctx.cwd, signal);
 				const details = {
-					agentScope: PROJECT_AGENT_SCOPE,
+					agentScope: discovery.scope ?? "none",
 					role,
 					agent: agent.name,
 					filePath: agent.filePath,

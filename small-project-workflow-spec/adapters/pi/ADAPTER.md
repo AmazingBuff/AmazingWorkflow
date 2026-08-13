@@ -18,18 +18,31 @@ its authoritative specification.
 adds only `small_project_subagent`, which accepts one of the six fixed roles:
 `decision`, `implementer`, `reviewer`, `test-planner`, `test-runner`, or
 `reporter`. It discovers only the nearest project `.pi/agents` directory; it
-does not read user-level agents and it does not execute the unrendered
-`adapters/pi/agents` source files. This is why the builder must install the
-rendered agents into `.pi/agents`.
+does not execute the unrendered `adapters/pi/agents` source files. This is why
+the builder must install the rendered agents into `.pi/agents`.
+
+### Global install mode
+
+The extension, the `/small-project` prompt template, and the skill package can
+be installed globally in the pi user config directory
+(`~/.pi/agent/extensions/`, `~/.pi/agent/prompts/`, `~/.pi/agent/skills/`) so
+they load in every pi project. When no project `.pi/agents` directory exists,
+the extension falls back to user-level role agents installed at
+`~/.pi/agent/agents/` (honoring the `PI_CODING_AGENT_DIR` override). This
+makes the workflow usable in a brand-new project with no per-project setup;
+the project must still be trusted in pi. A project-local `.pi/agents`
+directory always takes precedence over the user-level fallback, preserving the
+repo-controlled behavior for projects that ship their own agents.
 
 Security matters here. Pi extensions execute with full permissions, and this
 extension starts a separate Pi process with `--approve`. The extension first
-requires Pi project trust and then loads the repository-controlled agent prompt
-from `.pi/agents`; do not trust a project before reviewing those files. The
-implementer and test runner intentionally expose Pi's `bash` tool. Their
-delegated work therefore requires a usable Bash/shell tool in the Pi runtime;
-the other role templates omit it. Review the rendered tool lists, model
-selectors, and thinking values before enabling the extension.
+requires Pi project trust and then loads agent prompts either from the
+repository-controlled `.pi/agents` (review before trusting a project) or,
+fallback only, from the user-controlled `~/.pi/agent/agents/` (review once at
+install time). The implementer and test runner intentionally expose Pi's
+`bash` tool. Their delegated work therefore requires a usable Bash/shell tool
+in the Pi runtime; the other role templates omit it. Review the rendered tool
+lists, model selectors, and thinking values before enabling the extension.
 
 The extension validates each rendered `provider/model-id` selector against
 Pi's available model registry. A missing, unauthenticated, malformed, or

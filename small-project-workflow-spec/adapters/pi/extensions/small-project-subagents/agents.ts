@@ -1,5 +1,15 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
+
+/**
+ * Pi's user-level config directory (honors PI_CODING_AGENT_DIR override).
+ * User-level agents are a fallback only; project .pi/agents always win.
+ */
+export const USER_AGENTS_DIR = path.join(
+	process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), ".pi", "agent"),
+	"agents"
+);
 
 export const ALLOWED_ROLES = [
 	"decision",
@@ -26,6 +36,8 @@ export interface ProjectAgent {
 export interface ProjectAgentDiscovery {
 	agents: Map<AllowedRole, ProjectAgent>;
 	projectAgentsDir: string | null;
+	userAgentsDir: string;
+	scope: "project" | "user" | null;
 	errors: string[];
 }
 
@@ -119,24 +131,36 @@ function findNearestProjectAgentsDir(cwd: string): string | null {
 	}
 }
 
-/** Discover only repo-controlled .pi/agents definitions; user agents are intentionally excluded. */
+/**
+ * Discover role agents for the current project. Project-controlled
+ * `.pi/agents` (nearest ancestor) takes precedence; when no project agents
+ * directory exists, falls back to the user-level agents directory so the
+ * workflow works in brand-new projects without per-project setup.
+ */
 export function discoverProjectAgents(cwd: string): ProjectAgentDiscovery {
 	const projectAgentsDir = findNearestProjectAgentsDir(cwd);
+	const userAgentsDir = USER_AGENTS_DIR;
+	const preferredDir = projectAgentsDir ?? userAgentsDir;
+	const scope: "project" | "user" | null = projectAgentsDir
+		? "project"
+		: fs.existsSync(userAgentsDir)
+			? "user"
+			: null;
 	const agents = new Map<AllowedRole, ProjectAgent>();
 	const errors: string[] = [];
 	const invalidRoles = new Set<AllowedRole>();
-	if (!projectAgentsDir) return { agents, projectAgentsDir, errors };
+	if (!preferredDir || !scope) return { agents, projectAgentsDir, userAgentsDir, scope, errors };
 
 	let entries: fs.Dirent[];
 	try {
-		entries = fs.readdirSync(projectAgentsDir, { withFileTypes: true });
+		entries = fs.readdirSync(preferredDir, { withFileTypes: true });
 	} catch (error) {
-		return { agents, projectAgentsDir, errors: [`cannot list ${projectAgentsDir}: ${String(error)}`] };
+		return { agents, projectAgentsDir, userAgentsDir, scope, errors: [`cannot list ${preferredDir}: ${String(error)}`] };
 	}
 
 	for (const entry of entries) {
 		if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-		const result = parseProjectAgent(path.join(projectAgentsDir, entry.name));
+		const result = parseProjectAgent(path.join(preferredDir, entry.name));
 		if (result.error) {
 			errors.push(result.error);
 			continue;
@@ -146,11 +170,11 @@ export function discoverProjectAgents(cwd: string): ProjectAgentDiscovery {
 		if (agents.has(agent.role)) {
 			agents.delete(agent.role);
 			invalidRoles.add(agent.role);
-			errors.push(`${projectAgentsDir}: duplicate ${agent.name} definitions`);
+			errors.push(`${preferredDir}: duplicate ${agent.name} definitions`);
 			continue;
 		}
 		agents.set(agent.role, agent);
 	}
 
-	return { agents, projectAgentsDir, errors };
+	return { agents, projectAgentsDir, userAgentsDir, scope, errors };
 }

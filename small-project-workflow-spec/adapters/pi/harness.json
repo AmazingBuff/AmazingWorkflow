@@ -86,8 +86,8 @@
       "target_layout": ".pi/skills/small-project-workflow/references/SPEC.md plus .pi/skills/<skill-name>/SKILL.md",
       "reason": "The installed workflow must retain its authoritative SPEC.md at the workflow skill's references location and preserve the complete sibling skill package."
     },
-    "agent_scope": "project",
-    "agent_directory": ".pi/agents",
+    "agent_scope": "project-first, user-level fallback",
+    "agent_directory": ".pi/agents (nearest ancestor); user-level fallback at ~/.pi/agent/agents when absent",
     "tool": {
       "name": "small_project_subagent",
       "modes": ["single"],
@@ -104,7 +104,7 @@
     "validation": [
       "Each rendered agent has name, description, tools, model, and thinking frontmatter.",
       "The prompt, not a subagent definition, acts as the main-session orchestrator.",
-      "The extension discovers only .pi/agents in the current project hierarchy.",
+      "The extension discovers the nearest project .pi/agents first, then falls back to user-level agents; project agents always win.",
       "The extension invokes a separate Pi process with JSON, no-session, approval, model, thinking, tools, and appended system-prompt flags."
     ]
   }
