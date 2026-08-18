@@ -5,7 +5,7 @@ description: Apply the workflow's self-contained C++ and CMake engineering stand
 
 # Small Project C++/CMake Rules
 
-本 skill 是 workflow 内置且自包含的 C++/CMake 规范。不要读取、触发或依赖环境中的 `cpp-cmake-engineering-rules`；所有权威内容均在本目录。
+本 skill 是 workflow 内置且自包含的 C++/CMake 规范。所有权威内容均在本目录。
 
 同时遵守已通过当前 Harness 原生 loader 加载的 `small-project-code-contract`。冲突时按 workflow 的全局优先级裁决；本 skill 的绿地默认值只在仓库没有更高优先级规则时生效。
 
@@ -46,6 +46,7 @@ python scripts/inspect_project.py <project-root> --format json
 - 默认值语义、RAII 和唯一所有权；`shared_ptr` 只用于真实共享生命周期，裸指针/引用表达借用。
 - 运行时替换使用小接口或 callable；编译期策略才使用 concepts、traits 或 policy。
 - CMake 使用 target-based 命令、最窄正确作用域、单一依赖来源和 binary-tree 生成物。
+- 对于使用预编译头文件的项目，在CMake中添加了 `target_precompile_headers` 后，项目文件中无需再添加额外的 `pch.h` 头文件包含。
 - 公共 API 不泄漏私有实现、具体后端或不必要的外部库类型。
 - 便利重载转发至一个 canonical implementation，不复制算法、转换或验证。
 - 每个新外部信任边界只验证一次；可信内部不重复输入验证，但保留 assertion、生命周期、并发、内存、ABI 和运行状态检查。

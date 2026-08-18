@@ -42,17 +42,22 @@
 | 枚举值 | `e_` + `snake_case` | `e_graphics`, `e_vulkan` |
 | 成员变量 | `m_` + `snake_case` | `m_device`, `m_allocator` |
 | 外部借用成员指针 | `m_ref_` + `snake_case` | `m_ref_adapter` |
-| 全局常量 / `constexpr` | `PascalCase` | `Max_Allowable_Error`, `Default_Timeout` |
+| 全局常量（`const`/`constexpr`） | `Upper_Snake_Case` | `Max_Allowable_Error`, `Default_Timeout` |
+| 全局变量 | `g_` + `snake_case` | `g_render_engine`, `g_swap_chain` |
 | 函数 / 方法 | `snake_case` | `fetch_queue()`, `import_scene()` |
-| 局部变量 | `snake_case` | `queue_desc`, `render_node` |
+| 局部变量（含局部 `const`） | `snake_case` | `queue_desc`, `render_node` |
+| 局部静态变量 / `static`（含 `static constexpr`） | `s_` + `snake_case` | `s_queue_count`, `s_node_index` |
 | 宏 | `ALL_CAPS` + `_` | `CHECK_RESULT`, `SAFE_FREE` |
 | 模板参数 | 单大写字母或 `PascalCase` | `T`, `F`, `Args`, `Key`, `Value` |
 | 头文件保护 | 统一使用 `#pragma once` | `#pragma once` |
 
 - `m_ref_` 表示成员指向外部对象且本类不拥有该对象；生命周期必须由接口或类型关系保证。
+- 常量与变量按作用域判定：全局空间（含命名空间，不含函数内）的 `const`/`constexpr` 变量均按常量命名；局部空间（函数内）中，`constexpr` 变量一般会额外加 `static`，按局部静态 `s_` 命名，`const` 变量按普通变量命名。
+- 常量使用 `Upper_Snake_Case`（首字母大写 + 下划线，如 `Max_Allowable_Error`）；与宏 `ALL_CAPS`（全大写）的区别仅在于首字母是否大写。
 - 工厂函数使用模块缩写前缀，例如 `GPU_create_device()`、`GFX_create_context()`。
 - 第一方代码放在项目根命名空间中；实现细节可放入项目既有的 `detail` 或 `Internal` 命名空间。
 - `const` 放在类型右侧，统一使用 east const：`Type const* ptr`、`Type const& ref`。
+- 尽可能写出精确类型；`auto` 仅允许用于无法具名的类型（lambda、结构化绑定、转发引用），且不得借 `auto` 引入隐式转换（如 `auto x = some_int;`）。
 
 ## 文件结构、include 与命名空间
 
