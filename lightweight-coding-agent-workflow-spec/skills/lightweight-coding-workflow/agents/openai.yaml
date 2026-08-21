@@ -1,0 +1,4 @@
+interface:
+  display_name: "Two-Phase Coding Workflow"
+  short_description: "Plan in the main task, then implement with a chosen subagent."
+  default_prompt: "Use $lightweight-coding-workflow to plan this coding task with me, then delegate the approved implementation to the model I choose."
