@@ -1,0 +1,31 @@
+# Build output
+/build
+
+# IDE
+/.vs/
+/.vscode/
+/.idea/
+*.user
+*.suo
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+_deps/
+# 本机专用 preset（含个人路径），不提交
+/CMakeUserPresets.json
+
+# Compiled
+*.obj
+*.pdb
+*.ipdb
+*.iobj
+*.pch
+*.dll
+*.exp
+*.lib
+
+# Logs
+*.log

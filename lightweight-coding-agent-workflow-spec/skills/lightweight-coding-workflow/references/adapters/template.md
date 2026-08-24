@@ -2,7 +2,7 @@
 host_adapter: "{{HOST_ADAPTER_ID}}"
 host_id: "{{HOST_ID}}"
 display_name: "{{HOST_DISPLAY_NAME}} Host Adapter"
-protocol_version: "0.3"
+protocol_version: "0.4"
 adapter_version: "{{ADAPTER_VERSION}}"
 support_state: "AUTHORING_ONLY"
 supported_surfaces:
@@ -24,7 +24,7 @@ verified_on: null
 
 This file is intentionally `AUTHORING_ONLY`. Its placeholders and checklist help an adapter author apply the [Host Adapter Contract](../adapter-contract.md) to the [Core protocol](../protocol.md). It is not executable support, and copying or filling it does not make a host supported.
 
-Keep `support_state: AUTHORING_ONLY` until every required operation has a concrete host mapping and the full verification checklist has independent evidence. Protocol 0.3 still rejects `EXPERIMENTAL` adapters for implementation writes.
+Keep `support_state: AUTHORING_ONLY` until every required operation has a concrete host mapping and the full verification checklist has independent evidence. Protocol 0.4 selects `EXPERIMENTAL` adapters only through the user's explicit named acknowledgement recorded in the approved contract.
 
 ## Authoring placeholders
 

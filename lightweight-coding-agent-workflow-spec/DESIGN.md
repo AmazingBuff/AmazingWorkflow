@@ -2,11 +2,11 @@
 
 状态：APPROVED
 
-版本：0.3
+版本：0.4
 
-日期：2026-08-21
+日期：2026-08-22
 
-选定方案：Host-neutral Core + Host Adapter Contract + Verified Codex Adapter
+选定方案：Host-neutral Core + Host Adapter Contract + Verified Codex Adapter + Bundled Coding-Rule Components
 
 ## 1. 设计结论
 
@@ -15,7 +15,9 @@ v0.3 在 v0.2 的宿主中立 Core 与 Host Adapter 架构上加入 Git 版本�
 - Core 固定契约、阶段、单写入者、工作树保护、版本控制授权和 `DONE/BLOCKED/FAILED` 结果规则。
 - Host Adapter Contract 固定宿主识别、Planner 绑定、模型验证、worker 调度、权限继承、生命周期、进度、结果回传和版本控制管理接口。
 - Planner 在批准实现或发生产品代码写入前，必须选择且只选择一个兼容的 `VERIFIED` Adapter，并验证全部必需能力。
-- Codex Adapter 是 v0.3 唯一 `VERIFIED` Adapter，保持 v0.2 的 Codex 行为与安装布局，并映射只读 Git baseline、精确暂存、授权提交和独立授权推送。
+- Codex Adapter 保持 `VERIFIED`（protocol `0.3`，在 0.4 文档化兼容范围内继续可选），保持 v0.2 的 Codex 行为与安装布局，并映射只读 Git baseline、精确暂存、授权提交和独立授权推送。
+- v0.4 新增可选编码规范组件层：实现契约通过 `Applicable coding rules` 携带组件文档路径，实现 worker 在首次编辑前加载；SPW 代码规范的组合适配版位于 Skill 的 `assets/coding-rules/`。
+- 新增 DeepSeek Harness（DSH）Adapter（`EXPERIMENTAL`）：九项能力已完整映射；仅在用户于实现批准中显式点名认可该 Adapter 及其状态时可选，完成验证清单后按证据升 `VERIFIED`。
 - 通用 Adapter Template 为 `AUTHORING_ONLY`，只用于编写未来映射，不代表任何宿主可执行。
 - 完整 Git 提交与 Changelog 规范只保留在 Skill canonical reference；仓库级文档只提供发现链接。
 
@@ -32,7 +34,7 @@ v0.3 在 v0.2 的宿主中立 Core 与 Host Adapter 架构上加入 Git 版本�
 7. **阻塞优于猜测**：需要用户决策、新权限或扩展范围时返回 `BLOCKED`。
 8. **结果必须有证据**：`DONE` 必须列出路径、验收证据、命令退出状态、未验证项和风险。
 9. **权限不可扩大**：Adapter 只能继承或缩小宿主任务权限。
-10. **只有 VERIFIED 可写**：其他支持状态不能调度产品代码实现。
+10. **默认只有 VERIFIED 可写**：其他支持状态不能调度产品代码实现；唯一例外是用户在同一实现批准中显式点名认可某个 `EXPERIMENTAL` Adapter，且契约记录该认可。
 11. **版本控制单独授权**：commit 和 push 分别授权且默认 `none`；commit authority 永不隐含 push authority。
 
 ## 3. 架构
@@ -70,6 +72,7 @@ flowchart LR
 - `references/git-commit-convention.md`：Git 提交边界、精确暂存、Changelog 和 Conventional Commit 的 canonical policy。
 - `references/adapters/*.md`：每个宿主的具体映射。
 - `assets/implementation-contract.md`：契约数据模板。
+- `assets/coding-rules/`：SPW 编码规范的组合适配组件（worker 按契约的 Applicable coding rules 加载）。
 
 Core 不包含 Codex 路径、自定义 Agent 名称或 Codex 模型优先级；这些内容只存在于 Codex Adapter。
 
@@ -122,7 +125,8 @@ Planner 在请求实现批准、写入批准契约或允许产品代码写入之
 
 | Host / artifact | 状态 | Protocol | Adapter | 产品代码写入 |
 | --- | --- | --- | --- | --- |
-| Codex Desktop / CLI / IDE extension | `VERIFIED` | `0.3` | `codex` `0.3` | 是 |
+| Codex Desktop / CLI / IDE extension | `VERIFIED` | `0.3`（0.4 兼容范围内可选） | `codex` `0.3` | 是 |
+| DeepSeek Harness web GUI | `EXPERIMENTAL` | `0.4` | `dsh` `0.4` | 仅限用户显式点名认可 |
 | Generic adapter template | `AUTHORING_ONLY` | `0.3` | 未实例化 | 否 |
 | Claude Code | `UNSUPPORTED` | 无 | 无 | 否 |
 | Cursor | `UNSUPPORTED` | 无 | 无 | 否 |
@@ -130,7 +134,7 @@ Planner 在请求实现批准、写入批准契约或允许产品代码写入之
 | Gemini CLI | `UNSUPPORTED` | 无 | 无 | 否 |
 | 其他未命名宿主 | `UNSUPPORTED` | 无 | 无 | 否 |
 
-本矩阵不把概念相似性视为支持证据。v0.3 没有 `EXPERIMENTAL` 宿主 Adapter。
+本矩阵不把概念相似性视为支持证据。v0.4 的唯一 `EXPERIMENTAL` Adapter 是 DSH，需用户显式点名认可方可选用；升级为 `VERIFIED` 必须先保留 adapter 文档验证清单的逐项证据。
 
 ## 8. 两阶段状态模型
 
@@ -204,7 +208,12 @@ lightweight-coding-agent-workflow-spec/
         ├── agents/
         │   └── openai.yaml
         ├── assets/
-        │   └── implementation-contract.md
+        │   ├── implementation-contract.md
+        │   └── coding-rules/        # SPW 编码规范组合适配组件
+        │       ├── README.md
+        │       ├── small-project-code-contract/SKILL.md
+        │       ├── small-project-cpp-rules/…
+        │       └── small-project-python-rules/SKILL.md
         └── references/
             ├── protocol.md
             ├── adapter-contract.md
@@ -217,6 +226,7 @@ lightweight-coding-agent-workflow-spec/
 ## 13. Compatibility（兼容性和升级）
 
 - v0.3 保留 v0.2 的两阶段、Planner/Implementer 职责、单写入者、显式模型选择与 Codex 权限行为。
+- v0.4 相对 v0.3 为增量变更：新增可选 `Applicable coding rules` 契约章节、对应派发信封字段与 `EXPERIMENTAL` 显式认可选择路径；v0.3 验证的 Adapter 在该文档化兼容范围内保持可选。
 - 用户级安装路径不变；`lightweight_implementer.toml` 和 `agents/openai.yaml` 不需要因 v0.3 改写。
 - v0.3 新契约保留三项 Adapter 元数据并新增 Version control 决策；结果 schema 同步增加版本控制证据。
 - 已批准的旧契约不会被原地修改。恢复旧任务时使用匹配的旧协议，或重新规划并明确批准一份 v0.3 修订版。
@@ -224,6 +234,6 @@ lightweight-coding-agent-workflow-spec/
 
 ## 14. 非目标和失败策略
 
-v0.3 不实现或声称支持非 Codex 宿主，不增加 runtime、依赖、第三阶段、并行 writer 或自动模型替换。它不自动暂存、提交、推送、部署或发布；只有契约中的精确独立授权才能启用对应版本控制操作。
+v0.4 不声称任何宿主开箱即 `VERIFIED`：DSH Adapter 以 `EXPERIMENTAL` 提供并需用户显式认可与逐项验证后方可升级；框架不增加 runtime、依赖、第三阶段、并行 writer 或自动模型替换。它不自动暂存、提交、推送、部署或发布；只有契约中的精确独立授权才能启用对应版本控制操作。
 
 Adapter Gate 失败发生在批准和产品写入前，结果为 `CAPABILITY_UNAVAILABLE`。实现启动后，需要用户决策、权限或契约修订时为 `BLOCKED`；同一契约和环境下的证据表明无法继续时为 `FAILED`。

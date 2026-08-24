@@ -1,6 +1,6 @@
 # Two-Phase Coding Core Protocol
 
-Protocol version: `0.3`.
+Protocol version: `0.4`.
 
 This document defines the host-neutral contract, state, worktree, single-writer, and result rules. Host detection and execution mappings belong to the [Host Adapter Contract](adapter-contract.md) and the selected adapter reference.
 
@@ -36,6 +36,7 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - Existing user changes that must be preserved are identified in the baseline or constraints.
 - Verification commands are real project commands, or the contract states why a check is manual.
 - `implementation_model` is the exact user-approved value. Parent inheritance is recorded only as `inherit-parent (user-approved)`.
+- A deployment that bundles coding-rule component documents records them in an `Applicable coding rules` section, one host-resolvable absolute path per entry, and the worker loads every listed document before its first edit; deployments without bundled components omit the section.
 - The Version control section records `git` or `none`. A Git-backed task also records the read-only baseline, one logical commit boundary, Changelog decision and proposed entry, proposed Conventional Commit message, commit authority, and separate push authority.
 - Commit authority and push authority default to `none`. Any granted authority names the exact action and scope; push authority also names the remote and refspec.
 - Open product or architecture questions make the contract ineligible for approval.
@@ -54,7 +55,8 @@ Create a new revision when any of these changes:
 - destructive-operation authority;
 - acceptance criteria or verification obligations;
 - version-control system, logical commit boundary, Changelog disposition, proposed commit message, commit authority, or push authority;
-- implementation model, reasoning effort, host adapter, or adapter version.
+- implementation model, reasoning effort, host adapter, or adapter version;
+- the applicable coding rules set.
 
 Do not overwrite an approved contract. Mark an old revision `SUPERSEDED` only after its replacement is approved, and link the revisions through `supersedes`.
 
@@ -247,3 +249,7 @@ For `DONE`, the Planner reports:
 9. contract location and revision.
 
 The Planner may inspect the diff and rerun read-only checks, but may not edit product code.
+
+## Protocol 0.4 compatibility
+
+Protocol `0.4` is additive over `0.3`: it adds the optional `Applicable coding rules` contract section, the matching dispatch-envelope entries, and an explicit-approval path for selecting one `EXPERIMENTAL` adapter (see the [Host Adapter Contract](adapter-contract.md)). Contracts written under `0.3` remain valid `0.4` contracts.

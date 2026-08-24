@@ -38,6 +38,8 @@ This adapter is the sole `VERIFIED` protocol 0.3 mapping. It implements the [Hos
 | Task records | Repository-local `.codex/task-runs/<task-id>/implementation-contract-v<revision>.md` |
 | Result schemas | Core `DONE`, `BLOCKED`, and `FAILED` Markdown schemas |
 
+Protocol `0.4` is additive over `0.3` (see the [Host Adapter Contract](../adapter-contract.md)); this `0.3`-verified mapping remains eligible under a `0.4` Core within the documented compatibility range.
+
 ## Operation map
 
 | Capability | Operation | Codex mechanism | Failure mapping |

@@ -4,7 +4,7 @@ revision: {{REVISION}}
 status: "APPROVED"
 created_at: "{{ISO_8601_TIMESTAMP}}"
 supersedes: null
-protocol_version: "0.3"
+protocol_version: "0.4"
 host_adapter: "{{VERIFIED_HOST_ADAPTER_ID}}"
 adapter_version: "{{VERIFIED_ADAPTER_VERSION}}"
 implementation_model: "{{USER_APPROVED_MODEL_OR_INHERIT_PARENT}}"
@@ -66,6 +66,12 @@ baseline_revision: "{{GIT_REVISION_OR_NOT_APPLICABLE}}"
 ## Constraints
 
 - {{COMPATIBILITY_STYLE_SECURITY_PERFORMANCE_OR_DEPENDENCY_CONSTRAINT}}
+
+## Applicable coding rules
+
+- `{{CODING_RULE_COMPONENT_PATH_OR_NONE}}`
+
+List every bundled coding-rule component document the worker must load before its first edit, one host-resolvable absolute path per entry, or `None`. Changing this list requires a new revision.
 
 ## Acceptance criteria
 

@@ -1,0 +1,4 @@
+[submodule "extern/CommonLibSSE"]
+	path = extern/CommonLibSSE
+	url = {{COMMONLIB_URL}}
+	branch = {{COMMONLIB_BRANCH}}

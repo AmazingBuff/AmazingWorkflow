@@ -1,0 +1,15 @@
+{
+  "name": "{{PROJECT_NAME_LOWER}}",
+  "version": "{{PROJECT_VERSION}}",
+  "dependencies": [
+    "fmt",
+    "spdlog",
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    },
+    "directxmath",
+    "directxtk"{{VCPKG_EXTRA_DEPS}}
+  ],
+  "builtin-baseline": "{{VCPKG_BASELINE}}"
+}

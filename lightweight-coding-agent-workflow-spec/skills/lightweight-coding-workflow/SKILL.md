@@ -5,7 +5,7 @@ description: Orchestrate requested code changes as user-facing planning in the c
 
 # Lightweight Coding Workflow
 
-Protocol version: `0.3`.
+Protocol version: `0.4`.
 
 Keep the current main task as the only user-facing Planner. Delegate approved product-code writes to one implementation worker through exactly one verified host adapter.
 
@@ -18,11 +18,11 @@ Before requesting approval, creating an approved contract, dispatching implement
 3. Determine whether the workspace is Git-backed using read-only inspection. For Git repositories, read [references/git-commit-convention.md](references/git-commit-convention.md) completely before preparing the proposal.
 4. Identify the current host using read-only host signals.
 5. Find the adapter reference under `references/adapters/` whose `host_id` matches that host.
-6. Require exactly one matching adapter with `support_state: VERIFIED` and read it completely.
+6. Require exactly one matching adapter with `support_state: VERIFIED` and read it completely; an `EXPERIMENTAL` match is eligible only when the user explicitly approves that named adapter and its state in the implementation approval, which the contract must record.
 7. Validate that its `protocol_version` is compatible, its `adapter_version` is present, and every required capability and operation from the Host Adapter Contract has a concrete mapping.
 8. Use only that adapter's `identify_host`, `bind_planner`, `validate_model`, `dispatch_worker`, `inherit_permissions`, `control_lifecycle`, `report_progress`, `relay_result`, and `manage_version_control` operations.
 
-Complete this gate before asking the user to approve implementation or performing any product-code write. `EXPERIMENTAL`, `AUTHORING_ONLY`, and `UNSUPPORTED` adapters are not eligible for implementation. If no adapter matches, more than one verified adapter matches, or any required capability is unavailable, return `CAPABILITY_UNAVAILABLE` with the host, adapter candidates, and missing capability; do not approve a contract, dispatch a worker, or implement in the Planner as a fallback.
+Complete this gate before asking the user to approve implementation or performing any product-code write. `AUTHORING_ONLY` and `UNSUPPORTED` adapters are never eligible for implementation; an `EXPERIMENTAL` adapter only through the explicit named approval above. If no adapter matches, more than one verified adapter matches, or any required capability is unavailable, return `CAPABILITY_UNAVAILABLE` with the host, adapter candidates, and missing capability; do not approve a contract, dispatch a worker, or implement in the Planner as a fallback.
 
 Create contracts from [assets/implementation-contract.md](assets/implementation-contract.md). Do not invent another contract or result schema.
 
@@ -59,6 +59,7 @@ Present:
 - numbered requirements;
 - implementation approach and expected paths;
 - constraints and protected existing changes;
+- the applicable coding-rule components the worker must load, when bundled components apply;
 - numbered acceptance criteria;
 - real verification commands or explicit manual checks;
 - risks and assumptions;
@@ -97,7 +98,7 @@ Creating task records does not authorize product-code edits, changes to reposito
 1. Confirm that no other write-capable worker owns the worktree.
 2. Revalidate the adapter metadata and all nine required capabilities immediately before dispatch.
 3. Validate the approved model and optional reasoning effort through the adapter.
-4. Dispatch exactly one worker through the adapter, passing the absolute approved-contract path, the absolute path to the loaded Core protocol, task id, revision, and the exact adapter-defined model selection.
+4. Dispatch exactly one worker through the adapter, passing the absolute approved-contract path, the absolute path to the loaded Core protocol, task id, revision, the exact adapter-defined model selection, and the absolute paths of the coding-rule components listed by the contract.
 5. Tell the worker to treat the contract as the sole authority, avoid user questions and scope expansion, spawn no other writer, and return exactly one Core result schema.
 
 Do not dispatch an additional writer, reviewer, tester, or explorer. If dispatch or capability validation fails, use the adapter's failure behavior and do not implement in the Planner.
