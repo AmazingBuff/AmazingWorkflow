@@ -1,70 +1,123 @@
-# 构建、工具链与验证
+# Build, acquisition, and verification
 
-## 1. 前置条件
+## Toolchain
 
-- Visual Studio 2022（C++ 桌面开发），CMake ≥ 3.22，git。
-- vcpkg：设置 `VCPKG_ROOT` 环境变量（本机为 `C:\env\vcpkg`）。
-- 运行时 Address Library 由用户安装（Nexus 32444 / VR 版），构建不需要。
+Generated projects target Windows x64, Visual Studio 2022, C++23, CMake 3.22
+or newer, and vcpkg in manifest mode. Set `VCPKG_ROOT` before configuring.
+SKSE and the runtime-specific Address Library are end-user requirements, not
+package-test inputs.
 
-## 2. 标准构建流程
+The generated project does not pin an exact Visual C++ patch version. It lets
+the selected VS2022 installation and vcpkg triplet resolve a compatible v143
+toolset. First-party diagnostics are private target options, including
+`/W4 /WX`; there is no global compiler-flags cache value and no mutation of
+CommonLib's target.
+
+## CommonLib acquisition
+
+Default scaffolding is offline and prints the manual commands. `--git-init`
+runs only local repository initialization. To acquire CommonLib explicitly:
 
 ```powershell
-# 1) 拉取 CommonLibSSE（及其嵌套 submodule，如 extern/openvr）
+git init
+git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git extern/CommonLibSSE
 git submodule update --init --recursive
+```
 
-# 2) 配置（首次会经 vcpkg 安装依赖：fmt/spdlog/directxmath/directxtk/...）
+The add command creates a real `.gitmodules` and gitlink; commit both. The
+separately named `--add-commonlib-submodule` option runs the first two commands
+and is network-capable. Tests replace its process boundary with a mock.
+
+For an existing local source tree, set `CommonLibSSEPath_NG` as a CMake cache
+variable or environment variable. The path must contain CommonLib's
+`CMakeLists.txt`. No legacy implementation fallback exists.
+
+## Preset build
+
+`CMakePresets.json` contains a configure preset and a build preset with the
+same public name:
+
+```powershell
 cmake --preset "msvc release"
-
-# 3) 构建（产物 "build/msvc release/src/Release/<Name>.dll"）
 cmake --build --preset "msvc release"
-
-# 4) 打 ZIP 包（可选，产物 build/packaging/<Name>-<ver>.zip）
 cpack --config "build/msvc release/CPackConfig.cmake"
 ```
 
-- 产物安装路径（install 规则）：`<Name>.dll` → `SKSE/Plugins/`，
-  `<Name>.pdb` → 包根目录（component: pdbs）。
-- 拷贝到游戏目录：设置 `CompiledPluginsPath` 环境变量 + `-DCOPY_OUTPUT=ON`，
-  POST_BUILD 自动拷到 `<CompiledPluginsPath>/SKSE/Plugins/`。
+The build preset references the configure preset and selects Release for the
+Visual Studio multi-config generator. Expected DLL output is below
+`build/msvc release/src/Release/`. Packaging installs the DLL under
+`SKSE/Plugins` and the PDB at package root.
 
-## 3. 工具链对齐（重要，源项目踩过的坑）
+`COPY_OUTPUT` is off by default. To enable it, set `CompiledPluginsPath` and
+configure with `-DCOPY_OUTPUT=ON`. This is an explicit local deployment write,
+not part of package validation.
 
-- vcpkg 编译 spdlog 用的是最新 MSVC（如 14.44）；CMake 默认 `v143` 可能解析到较旧
-  工具集（14.38），其 STL 缺少 14.44 的向量化符号，导致链接 `LNK2019`。
-- 修复：在 `src/CMakeLists.txt` 设置
-  `VS_GLOBAL_VCToolsVersion "14.44.35207"`，强制插件与 vcpkg 依赖同工具集。
-- CMake ≥ 3.31 会丢弃 preset 中 `toolset` 的 `version=` 子句，因此必须保留上面的
-  `VS_GLOBAL_VCToolsVersion` 兜底。
+## Dependency lock
 
-## 4. VR 构建前置
+The default baseline
+`ee12231b20c95013c6638d845d04c91559a1d1ff` and versioned dependency entries
+mirror CommonLibSSE-NG v6.7.0 branch `ng` on 2026-08-25. CommonLib currently
+requires vcpkg-cmake-config, DirectXMath, DirectXTK, fmt, nlohmann-json,
+rapidcsv, SimpleIni, spdlog, toml11, and xbyak. DirectXTK and SimpleIni remain
+in minimal manifests because they are current CommonLib requirements, even
+though the generated first-party target only finds/links them directly when a
+selected feature uses them.
 
-- 需要 CommonLibSSE 的 `extern/openvr` 子模块。缺失时：
-  ```bash
-  git -C extern/CommonLibSSE submodule update --init extern/openvr
-  # 或手动 clone：git clone https://github.com/ValveSoftware/openvr.git extern/CommonLibSSE/extern/openvr
-  ```
-- 只构建 flatrim（SE+AE）时可在预设中关闭 `ENABLE_SKYRIM_VR`，避免 openvr 要求。
+Do not update the submodule independently. Compare CommonLib's manifest, CMake
+helper, runtime defaults, nested content, and license files, then update the
+baseline, versions, docs, validator, and tests together.
 
-## 5. 离线 / 本机专用预设
+## Offline package verification
 
-- 复用已有工程构建好的依赖目录（`<Proj>\build\vcpkg_installed\x64-windows-static-md`）：
-  在 `CMakeUserPresets.json` 定义 preset，设
-  `CMAKE_PREFIX_PATH` 指向该目录，并按需关 `SKSE_SUPPORT_PATCH_SAFETY`（避免在线拉 hde64）。
-- `CMakeUserPresets.json` 不提交（`.gitignore` 已排除）。
+From `skse-plugin-template-spec/`:
 
-## 6. 验证清单（新建/修改插件后）
+```powershell
+python -B -m unittest discover -s tests -v
+python -B tools/validate_package.py .
+```
 
-- [ ] `git submodule update --init --recursive` 成功，`extern/CommonLibSSE` 有内容。
-- [ ] `cmake --preset "msvc release"` 成功（首次经 vcpkg 装依赖）。
-- [ ] `cmake --build --preset "msvc release"` 成功，无 LNK2019 等链接错误。
-- [ ] 产物存在于 `"build/msvc release/src/Release/<Name>.dll"`；`cpack` 产物含 `SKSE/Plugins/<Name>.dll`。
-- [ ] 至少验证一个受支持运行时配置；涉及多运行时改动时扩大到 SE/AE/VR 矩阵。
-- [ ] 插件日志：进入游戏后 `Documents\My Games\Skyrim Special Edition\SKSE\<Name>.log`
-      显示 "loaded"；`kDataLoaded` 行为按预期触发。
-- [ ] 新模块：头文件只声明稳定契约；`src/CMakeLists.txt` 登记；`vcpkg.json` 依赖按需追加；
-      编码风格符合本 skill 内置的 `assets/coding-rules/small-project-cpp-rules` 组件。
+These standard-library checks generate isolated temporary fixtures, parse every
+JSON file, scan exact/spaced placeholders, verify file and dependency sets,
+exercise every runtime and representative metadata, mock Git success/failure,
+and enforce Present resource/state invariants. The tests import the executable
+Python modules, so a separate bytecode compilation command is unnecessary.
+`-B` prevents cache creation, and validation rejects every present
+`__pycache__` directory and `.pyc` file. No test invokes a network submodule,
+downloads vcpkg ports, or needs game assets.
 
-## 7. 不声称未运行项
+When CMake is installed, list presets without configuring dependencies:
 
-- 未实际编译的运行时/工具集组合不得在 README/文档中声称通过。
-- 常见问题先看日志（插件日志 + SKSE 日志 `SKSE.log`）。
+```powershell
+cmake --list-presets
+cmake --build --list-presets
+```
+
+Both outputs must expose `msvc release`. When
+`C:/env/vcpkg/vcpkg.exe` exists, copy a generated `vcpkg.json` to an isolated
+temporary fixture and run:
+
+```powershell
+C:/env/vcpkg/vcpkg.exe format-manifest <temporary-vcpkg.json>
+```
+
+Formatting changes must remain in the temporary fixture.
+
+## External build and runtime verification
+
+A release claim additionally requires a real CommonLib checkout, installed
+vcpkg dependencies, Windows SDK/MSVC, SKSE, and at least one selected Skyrim
+runtime. Verify configure, build, package contents, plugin/SKSE logs, Load/data
+messages, and selected hooks. Expand across SE/AE/VR whenever runtime-sensitive
+code changes.
+
+Package validation alone does not prove a DLL links or runs in Skyrim. Record
+unavailable compiler, SDK, submodule, vcpkg, game, and Address Library checks as
+unverified rather than success.
+
+## Licensing check
+
+Generated `README.md`, `LICENSE`, and VERSIONINFO must all state
+GPL-3.0-or-later. CommonLibSSE-NG's own Modding Exception and GPL-3.0 Linking
+Exception (with Corresponding Source) remain upstream terms. Before distributing
+a statically linked DLL, review the exact exception and corresponding-source
+requirements at the pinned CommonLib revision.

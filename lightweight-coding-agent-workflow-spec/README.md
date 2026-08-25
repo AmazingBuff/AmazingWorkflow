@@ -1,47 +1,41 @@
-# Lightweight Coding Agent Workflow v0.3
+# Lightweight Coding Agent Workflow v0.5
 
 A two-phase coding workflow with a host-neutral Core and explicit host adapters:
 
 1. The current user-facing task plans and freezes an implementation contract.
-2. Exactly one implementation worker writes and verifies through one `VERIFIED` adapter.
+2. Exactly one implementation worker writes and verifies through one compatible `VERIFIED` adapter.
 
-The framework has no service, database, CLI, executable runtime, or dependency. It preserves explicit implementation-model choice and one-writer ownership, and adds bounded version-control planning and evidence to the `DONE/BLOCKED/FAILED` result schemas.
+The workflow has no service, database, network dependency, package-manager dependency, or executable orchestration runtime. A standard-library-only development validator checks the source package and optional installed copy; it is not part of task execution.
 
 ## Architecture
 
 ```text
 Planner Skill ──loads──> Core Protocol
       │                    │
+      ├──classifies──> Documentation Impact
       ├──validates──> Host Adapter Contract
+      ├──freezes────> Contract + Git boundary + coding-rule paths
       │                    │
       └──selects exactly one VERIFIED Adapter
                                │
                                └──dispatches one implementation worker
 ```
 
-Core owns contract, state, worktree, single-writer, version-control authority, and result rules. The Adapter Contract defines nine required capabilities. A host adapter maps those capabilities to one host without leaking host paths, worker names, model precedence, or lifecycle terminology into Core.
+Core owns contract, phase, worktree, single-writer, documentation, version-control authority, and result rules. The Adapter Contract defines exactly nine capabilities. A host adapter maps those capabilities without leaking host paths, worker names, model resolution, or lifecycle terminology into Core.
 
-The Planner completes the adapter gate before requesting implementation approval or allowing product-code writes. Missing, ambiguous, incompatible, or incomplete adapters produce `CAPABILITY_UNAVAILABLE`; the Planner does not implement as a fallback.
-
-## Support states
-
-| State | Meaning | Implementation writes |
-| --- | --- | --- |
-| `VERIFIED` | All required operations are mapped and exercised for claimed surfaces. | Allowed after approval and revalidation. |
-| `EXPERIMENTAL` | Runnable mapping with incomplete verification. | Disabled by default in v0.3. |
-| `AUTHORING_ONLY` | Template or design material; no executable support claim. | Never. |
-| `UNSUPPORTED` | One or more required operations have no mapping. | Never. |
+The Planner completes the adapter gate before requesting implementation approval or allowing product-code writes. Missing, ambiguous, incompatible, incomplete, or non-`VERIFIED` adapters produce `CAPABILITY_UNAVAILABLE`; user consent cannot promote an adapter, and the Planner does not implement as a fallback.
 
 ## Support matrix
 
-| Host / artifact | State | Adapter | Surfaces |
-| --- | --- | --- | --- |
-| Codex | `VERIFIED` | `codex` `0.3` | Desktop, CLI, IDE extension |
-| Generic adapter template | `AUTHORING_ONLY` | none | authoring reference only |
-| Claude Code, Cursor, OpenCode, Gemini CLI | `UNSUPPORTED` | none | none |
-| Any unnamed host | `UNSUPPORTED` | none | none |
+| Host or artifact | State | Protocol / adapter | Surfaces | Product writes |
+| --- | --- | --- | --- | --- |
+| Codex | `VERIFIED` | `0.5` / `codex` `0.5` | Desktop, CLI, IDE extension | Yes, after approval and revalidation |
+| DeepSeek Harness | `EXPERIMENTAL` | `0.5` / `dsh` `0.5` | Web GUI candidate mapping | No |
+| Generic adapter template | `AUTHORING_ONLY` | `0.5` / placeholder | Authoring reference | No |
+| Claude Code, Cursor, OpenCode, Gemini CLI | `UNSUPPORTED` | none | none | No |
+| Any unnamed host | `UNSUPPORTED` | none | none | No |
 
-Codex is the sole verified host. The generic template does not claim support for any host.
+Only `VERIFIED` is write-eligible. DSH remains a non-dispatchable artifact until its full checklist has retained evidence and a deliberate future release changes its metadata.
 
 ## Source package
 
@@ -52,46 +46,78 @@ lightweight-coding-agent-workflow-spec/
 ├── README.md
 ├── agents/
 │   └── lightweight_implementer.toml
-└── skills/
-    └── lightweight-coding-workflow/
-        ├── SKILL.md
-        ├── agents/openai.yaml
-        ├── assets/implementation-contract.md
-        └── references/
-            ├── protocol.md
-            ├── adapter-contract.md
-            ├── git-commit-convention.md
-            └── adapters/
-                ├── codex.md
-                └── template.md
+├── docs/features/
+│   ├── README.md
+│   └── feature-documentation.md
+├── tests/
+│   └── test_validate_package.py
+├── tools/
+│   └── validate_package.py
+└── skills/lightweight-coding-workflow/
+    ├── SKILL.md
+    ├── agents/openai.yaml
+    ├── assets/
+    │   ├── feature-document.md
+    │   ├── implementation-contract.md
+    │   └── coding-rules/
+    │       ├── manifest.json
+    │       ├── README.md
+    │       ├── small-project-code-contract/...
+    │       ├── small-project-cpp-rules/...
+    │       └── small-project-python-rules/...
+    └── references/
+        ├── protocol.md
+        ├── adapter-contract.md
+        ├── feature-documentation-convention.md
+        ├── git-commit-convention.md
+        └── adapters/
+            ├── codex.md
+            ├── dsh.md
+            └── template.md
 ```
 
 Key references:
 
 - [Design and compatibility](DESIGN.md)
+- [Feature-document index](docs/features/README.md)
 - [Planner Skill](skills/lightweight-coding-workflow/SKILL.md)
 - [Core protocol](skills/lightweight-coding-workflow/references/protocol.md)
 - [Host Adapter Contract](skills/lightweight-coding-workflow/references/adapter-contract.md)
+- [Feature Documentation Convention](skills/lightweight-coding-workflow/references/feature-documentation-convention.md)
 - [Canonical Git commit and Changelog convention](skills/lightweight-coding-workflow/references/git-commit-convention.md)
 - [Verified Codex Adapter](skills/lightweight-coding-workflow/references/adapters/codex.md)
+- [Experimental DSH Adapter](skills/lightweight-coding-workflow/references/adapters/dsh.md)
 - [Authoring-only Adapter Template](skills/lightweight-coding-workflow/references/adapters/template.md)
+- [Bundled coding-rule provenance](skills/lightweight-coding-workflow/assets/coding-rules/README.md)
+- [Bundled coding-rule integrity manifest](skills/lightweight-coding-workflow/assets/coding-rules/manifest.json)
+- [Deterministic validator](tools/validate_package.py)
+- [Validator tests](tests/test_validate_package.py)
 
-## Compatibility with v0.2
+## Release and compatibility
 
-v0.3 preserves the v0.2 Codex execution model and installation behavior: the current main task remains Planner, one model-neutral `lightweight_implementer` performs writes, per-task model choice remains explicit, and permissions inherit from the parent task.
+Protocol `0.5` is the coherent reconciliation release. It retains the two phases, one writer, explicit model choice, bounded Git authority, bundled coding-rule components, and feature-documentation policy while making these rules consistent across Core, adapters, contracts, documentation, and results.
 
-New v0.3 contracts retain the v0.2 fields and add a Version control section. Approved older contracts are never rewritten in place; resume them with matching protocol and adapter resources or create and approve a v0.3 revision.
+The write gate is stricter than the historical `0.4` package: `EXPERIMENTAL` artifacts can no longer dispatch after user consent. The Codex adapter is released and validated at protocol/adapter `0.5` rather than relying on an older compatibility range. Approved historical contracts are not rewritten; continue them only with matching historical resources, or plan and approve a new `0.5` revision.
 
-The custom Agent TOML and UI metadata remain unchanged.
+The custom Agent TOML and UI metadata remain model-neutral and version-neutral. The Agent omits `model`, `model_reasoning_effort`, and `sandbox_mode`; the Codex adapter validates the task-specific model resolution and preserves the parent task's live permissions.
 
-## Install for the current user
+## Installation and discovery
 
-Install the same two components as v0.1:
+This package distinguishes the deployment currently used on this machine from portable authoring and discovery locations:
 
-- Copy `skills/lightweight-coding-workflow/` to the user-level Skill directory recognized by Codex. In the current local layout, this is `%USERPROFILE%\.codex\skills\lightweight-coding-workflow\`.
-- Copy `agents/lightweight_implementer.toml` to `%USERPROFILE%\.codex\agents\lightweight_implementer.toml`.
+- Current local deployment: copy `skills/lightweight-coding-workflow/` to `%USERPROFILE%\.codex\skills\lightweight-coding-workflow\`, and copy `agents/lightweight_implementer.toml` to `%USERPROFILE%\.codex\agents\lightweight_implementer.toml`.
+- Portable Skill authoring/discovery: current [official Codex Skill documentation](https://developers.openai.com/codex/skills) lists repository `.agents/skills` locations from the working directory through the repository root, plus user `$HOME/.agents/skills` and admin `/etc/codex/skills`.
+- Custom Agent discovery: current [official Codex subagent documentation](https://developers.openai.com/codex/subagents) lists personal `~/.codex/agents/` and project `.codex/agents/` TOML locations.
 
-Restart Codex if the Skill or custom Agent does not appear. The Agent intentionally omits `model`, `model_reasoning_effort`, and `sandbox_mode`; the verified Codex Adapter supplies per-task model mapping while permissions inherit from the parent task.
+These are explicit location choices, not an automatic migration promise. This package does not claim that Codex copies, migrates, or synchronizes a `.codex` Skill deployment with `.agents/skills`; choose one intended Skill location and verify the exact installed copy. Restart Codex if a newly copied Skill or custom Agent does not appear.
+
+From the package root, verify the currently used user-level deployment with:
+
+```powershell
+python -B tools/validate_package.py --package . --installed-skill "$env:USERPROFILE\.codex\skills\lightweight-coding-workflow" --installed-agent "$env:USERPROFILE\.codex\agents\lightweight_implementer.toml"
+```
+
+The implementation worker validates source only. Installation into a user-level directory is a separate Planner action after source validation and requires the applicable filesystem authority.
 
 ## Use
 
@@ -104,14 +130,23 @@ After I approve the plan, use <implementation-model> for implementation.
 
 On Codex, the verified Adapter keeps task records under `.codex/task-runs/<task-id>/`. The workflow does not modify `.gitignore` automatically.
 
-For Git-backed work, the Planner reads the canonical convention and proposes the baseline, logical commit boundary, Changelog disposition and entry, Conventional Commit message, and separate commit and push authorities. Both authorities default to `none`; approving implementation never authorizes staging, committing, or pushing. Non-Git work records `version_control_system: none` and skips Git operations.
+Every proposal classifies Documentation Impact as `create`, `update`, or `not-required`. Required feature documentation and its index are part of the same logical boundary as implementation, tests, necessary Changelog, and configuration. Git commit and push authorities remain separate and default to `none`.
+
+Bundled coding-rule components are ordinary package assets listed as absolute paths in an approved contract; they are not separately installed Skills and do not depend on another specification at runtime. Their [manifest](skills/lightweight-coding-workflow/assets/coding-rules/manifest.json) covers every bundled rule file with SHA-256, provenance, and synchronization metadata. Any intentional bundled-file change must update the corresponding manifest entry in the same change.
 
 ## Author another adapter
 
-Start from the [authoring template](skills/lightweight-coding-workflow/references/adapters/template.md) and satisfy the [Host Adapter Contract](skills/lightweight-coding-workflow/references/adapter-contract.md). The template remains `AUTHORING_ONLY` until every required operation has concrete mapping and retained verification evidence. Filling placeholders alone does not promote support.
+Start from the [authoring template](skills/lightweight-coding-workflow/references/adapters/template.md) and satisfy the [Host Adapter Contract](skills/lightweight-coding-workflow/references/adapter-contract.md). The template remains `AUTHORING_ONLY`, and a candidate remains non-write-capable until all operations have retained evidence and a deliberate versioned release marks it `VERIFIED`.
 
 ## Validate
 
-Validate the Skill, parse the unchanged Agent TOML and UI YAML, resolve all relative Markdown references, check Core isolation and all nine adapter metadata/operation mappings, scan for unintended scaffold markers and trailing whitespace, and inspect repository scope before installation. Verify Codex Git handling in an isolated repository with read-only baseline inspection, exact-path staging, a compliant commit, a clean post-commit state, and no remote or push.
+With Python 3.11 or newer (for the standard-library `tomllib` parser), run the test suite and then validate the source package:
+
+```powershell
+python -B -m unittest discover -s tests -p "test_*.py"
+python -B tools/validate_package.py --package .
+```
+
+The validator deterministically checks current-version declarations, package-relative Markdown links and anchors, Skill/adapter front matter, Agent TOML, UI YAML, exact adapter metadata and capability sets, the write gate, operation mappings, unresolved placeholders outside templates, feature-documentation integration, required sections, host-neutral Core language, bundled-rule manifest file sets and hashes, trailing whitespace, and optional source/install parity.
 
 The authoritative behavior and acceptance scenarios are defined in [DESIGN.md](DESIGN.md).

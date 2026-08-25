@@ -20,12 +20,15 @@ void hook_update(RE::Actor* a_this, float a_delta)
 
 void install()
 {
-    constexpr std::size_t Character_Update_Slot = 0xAD;
+    constexpr static std::size_t s_character_update_slot = 0xAD;
 
     // 多运行时：RE::VTABLE_Character[0] 由地址库提供 SE/AE/VR 三个地址
-    REL::Relocation<std::uintptr_t> characterVtbl{ RE::VTABLE_Character[0] };
-    g_update = reinterpret_cast<Update_t>(characterVtbl.write_vfunc(Character_Update_Slot, hook_update));
+    REL::Relocation<std::uintptr_t> character_vtable{ RE::VTABLE_Character[0] };
+    g_update = reinterpret_cast<Update_t>(character_vtable.write_vfunc(s_character_update_slot, hook_update));
 
-    logger::info("Installed Character::Update hook at vtable slot 0x{:X} (multi-runtime SE/AE/VR)"sv, Character_Update_Slot);
+    logger::info(
+        "Installed Character::Update hook at vtable slot 0x{:X} (multi-runtime SE/AE/VR)"sv,
+        s_character_update_slot
+    );
 }
 }

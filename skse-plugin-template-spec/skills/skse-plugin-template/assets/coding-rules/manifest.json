@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "source": "small-project-workflow-spec bundled coding-rule components",
+    "baseline_revision": "5fb6ec0",
+    "adaptation": "Host-neutral combination adapted for the SKSE template package; orchestration wording only."
+  },
+  "synchronization_notes": [
+    "Paths are normalized relative to this manifest's directory and use forward slashes.",
+    "Update CommonLib-independent coding rules only through an explicit source comparison, then refresh every SHA-256 entry.",
+    "The bundle is self-contained and must not read another specification or a user-level installation at runtime."
+  ],
+  "files": [
+    {
+      "path": "small-project-code-contract/SKILL.md",
+      "sha256": "675d0521e99e3f79f30f59f0a441d3f2962043e4f310b53f0fb17bf14aec2e37"
+    },
+    {
+      "path": "small-project-cpp-rules/SKILL.md",
+      "sha256": "efbfb8b3a24cf23c3cf5b6b4c16abecbd21455d2b9cf7cb544f0bdbaa3f63564"
+    },
+    {
+      "path": "small-project-cpp-rules/references/cmake-style.md",
+      "sha256": "96d8add1e0548befcb396fbea4a98e314fe83ab93773ef728125e2f8059cfc33"
+    },
+    {
+      "path": "small-project-cpp-rules/references/cpp-style.md",
+      "sha256": "a17bb20f388ad95a0c64d0dc8c1a47b74b02eef01f9a3608e59441de9a7e807b"
+    },
+    {
+      "path": "small-project-cpp-rules/references/decision-policy.md",
+      "sha256": "91b0fbe21072f5df299a895573457d02895b4ba11b85570894748f74dfb8527d"
+    },
+    {
+      "path": "small-project-cpp-rules/references/project-architecture.md",
+      "sha256": "77eeab6820aea7be6fe0454e217a56ac8675ee545b94d3076ce0418965880aa5"
+    },
+    {
+      "path": "small-project-cpp-rules/references/testing-and-validation.md",
+      "sha256": "097480832ff3083cca8b980005166cf71efa62f2a237de46e0aa6e4153871553"
+    },
+    {
+      "path": "small-project-cpp-rules/scripts/inspect_project.py",
+      "sha256": "57aee8c80e31d4f5f1ccdee557c04d5d1d98f75f04dc4e6ccc24a4781eb8b072"
+    }
+  ]
+}

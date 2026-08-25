@@ -1,0 +1,24 @@
+{{PROJECT_NAME}}
+Copyright (C) {{AUTHOR}}
+
+SPDX-License-Identifier: GPL-3.0-or-later
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details:
+https://www.gnu.org/licenses/gpl-3.0.html
+
+CommonLibSSE-NG linking notice
+--------------------------------
+
+This program statically links to CommonLibSSE-NG. CommonLibSSE-NG is distributed
+separately under GPL-3.0-or-later with its own Modding Exception and GPL-3.0
+Linking Exception (with Corresponding Source). Those exception terms belong to
+CommonLibSSE-NG's copyright holders. This file does not copy, modify, extend,
+grant, or revoke those terms. Review the exact upstream COPYING and
+EXCEPTIONS.md files for every CommonLibSSE-NG revision you distribute.

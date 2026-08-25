@@ -1,35 +1,51 @@
 #!/usr/bin/env python3
-"""SKSE plugin scaffold.
-
-Generates a new Skyrim SKSE plugin project (multi-runtime SE/AE/VR via CommonLibSSE)
-from the skse-plugin-template skill's templates/.
-
-Usage:
-    python scaffold.py --name MyPlugin --author "Your Name" --dir E:/SkyrimTools/Proj/MyPlugin
-    python scaffold.py --help
-"""
+"""Generate a validated CommonLibSSE-NG SKSE plugin project."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
-import shutil
 import subprocess
 import sys
-from datetime import date
+import unicodedata
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Sequence
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = SKILL_DIR / "templates"
 FEATURES_DIR = TEMPLATE_DIR / "features"
 
-# 与两个源项目（CorpseESP / FollowerSummonAllyFix）一致的 vcpkg builtin-baseline
-DEFAULT_VCPKG_BASELINE = "cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3"
+COMMONLIB_URL = "https://github.com/alandtse/CommonLibSSE-NG.git"
+COMMONLIB_BRANCH = "ng"
+COMMONLIB_SUBMODULE_COMMAND = [
+    "git",
+    "submodule",
+    "add",
+    "-b",
+    COMMONLIB_BRANCH,
+    COMMONLIB_URL,
+    "extern/CommonLibSSE",
+]
+
+# CommonLibSSE-NG ng v6.7.0 manifest baseline on 2026-08-25.
+DEFAULT_VCPKG_BASELINE = "ee12231b20c95013c6638d845d04c91559a1d1ff"
+BASE_VCPKG_DEPENDENCIES: list[object] = [
+    {"name": "vcpkg-cmake-config", "host": True},
+    {"name": "directxmath", "version>=": "2025-04-03"},
+    {"name": "directxtk", "version>=": "2025-10-27"},
+    {"name": "fmt", "version>=": "12.1.0"},
+    {"name": "nlohmann-json", "version>=": "3.12.0"},
+    {"name": "rapidcsv", "version>=": "8.90"},
+    {"name": "simpleini", "version>=": "4.25"},
+    {"name": "spdlog", "version>=": "1.16.0"},
+    {"name": "toml11", "version>=": "4.4.0"},
+    {"name": "xbyak", "version>=": "7.28"},
+]
 
 RUNTIMES = {
     "all": {"SE": "ON", "AE": "ON", "VR": "ON"},
@@ -41,40 +57,42 @@ RUNTIMES = {
     "ae-vr": {"SE": "OFF", "AE": "ON", "VR": "ON"},
 }
 
-# 功能模块描述：文件、vcpkg 依赖、CMake find_package / 链接、main.cpp 生命周期接线
 FEATURES = {
     "config": {
         "files": ["src/config.h", "src/config.cpp"],
-        "vcpkg_deps": ["simpleini"],
-        "cmake_find": ["simpleini CONFIG REQUIRED"],
-        "link": ["SimpleIni::SimpleIni"],
+        "depends": [],
+        "cmake_find": ["find_path(SIMPLEINI_INCLUDE_DIR SimpleIni.h REQUIRED)"],
+        "include_dirs": ["${SIMPLEINI_INCLUDE_DIR}"],
+        "link": [],
         "includes": ['#include "config.h"'],
         "load_glue": ["Config::load();"],
         "dataloaded_glue": [],
     },
-    "hotkey": {
-        "files": ["src/input.h", "src/input.cpp"],
-        "depends": ["config"],
-        "vcpkg_deps": [],
-        "cmake_find": [],
-        "link": [],
-        "includes": ['#include "input.h"'],
-        "load_glue": [],
-        "dataloaded_glue": [],
-    },
     "present_hook": {
         "files": ["src/esp_renderer.h", "src/esp_renderer.cpp"],
-        "vcpkg_deps": [],
-        "cmake_find": ["directxtk CONFIG REQUIRED"],
+        "depends": [],
+        "cmake_find": ["find_package(directxtk CONFIG REQUIRED)"],
+        "include_dirs": [],
         "link": ["Microsoft::DirectXTK", "d3d11", "dxgi"],
         "includes": ['#include "esp_renderer.h"'],
         "load_glue": [],
         "dataloaded_glue": ["ESPRenderer::install();"],
     },
+    "hotkey": {
+        "files": ["src/input.h", "src/input.cpp"],
+        "depends": ["config", "present_hook"],
+        "cmake_find": [],
+        "include_dirs": [],
+        "link": [],
+        "includes": ['#include "input.h"'],
+        "load_glue": [],
+        "dataloaded_glue": [],
+    },
     "vtable_hook": {
         "files": ["src/hooks.h", "src/hooks.cpp"],
-        "vcpkg_deps": [],
+        "depends": [],
         "cmake_find": [],
+        "include_dirs": [],
         "link": [],
         "includes": ['#include "hooks.h"'],
         "load_glue": ["Hooks::install();"],
@@ -82,8 +100,9 @@ FEATURES = {
     },
     "event_sink": {
         "files": ["src/hit_events.h", "src/hit_events.cpp"],
-        "vcpkg_deps": [],
+        "depends": [],
         "cmake_find": [],
+        "include_dirs": [],
         "link": [],
         "includes": ['#include "hit_events.h"'],
         "load_glue": ["HitEvents::install();"],
@@ -91,424 +110,503 @@ FEATURES = {
     },
 }
 
-COMMONLIB_URLS = {
-    "ng": "https://github.com/alandtse/CommonLibSSE-NG.git",
-    "vr": "https://github.com/alandtse/CommonLibVR.git",
-}
+PLACEHOLDER_KEY_PATTERN = re.compile(r"[A-Z][A-Z0-9_]*")
+PLACEHOLDER_CANDIDATE_PATTERN = re.compile(r"\{\s*\{\s*([^{}\r\n]*?)\s*\}\s*\}")
+PROJECT_NAME_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+BASELINE_PATTERN = re.compile(r"[0-9A-Fa-f]{40}")
+VERSION_PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+LINE_PLACEHOLDER_KEYS = frozenset(
+    {
+        "FEATURE_INCLUDES",
+        "ON_LOAD",
+        "ON_DATALOADED",
+        "RENDERER_EXTRA_INCLUDES",
+        "ON_PRESENT_BODY",
+        "SOURCE_FILES",
+        "HEADER_FILES",
+        "FEATURE_FIND_PACKAGES",
+        "FEATURE_INCLUDE_DIRECTORIES",
+        "FEATURE_LINK_LIBRARIES",
+    }
+)
+TEMPLATE_VALUE_KEYS = frozenset(
+    {
+        "PROJECT_NAME",
+        "PROJECT_NAME_LOWER",
+        "PROJECT_VERSION",
+        "PROJECT_VERSION_MAJOR",
+        "PROJECT_VERSION_MINOR",
+        "PROJECT_VERSION_PATCH",
+        "AUTHOR",
+        "AUTHOR_CMAKE",
+        "DESCRIPTION",
+        "DESCRIPTION_CMAKE",
+        "ENABLE_SKYRIM_SE",
+        "ENABLE_SKYRIM_AE",
+        "ENABLE_SKYRIM_VR",
+        "RUNTIME_SELECTION",
+        "FEATURE_SELECTION",
+        "VCPKG_BASELINE",
+        "VCPKG_DEPENDENCIES",
+        "DATE",
+    }
+)
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+
+class ScaffoldError(ValueError):
+    """An actionable scaffold validation or generation failure."""
 
 
-def fail(msg: str) -> None:
-    print(f"error: {msg}", file=sys.stderr)
-    sys.exit(1)
+@dataclass(frozen=True)
+class ScaffoldOptions:
+    name: str
+    author: str
+    description: str
+    version: str
+    runtimes: str
+    features: tuple[str, ...]
+    baseline: str
+    output_dir: Path
+    git_init: bool
+    add_commonlib_submodule: bool
+    generation_date: str
+
+
+def _contains_control(value: str) -> bool:
+    return any(unicodedata.category(character) == "Cc" for character in value)
+
+
+def _validate_single_line(label: str, value: str, *, allow_empty: bool = False) -> str:
+    if not value and not allow_empty:
+        raise ScaffoldError(f"{label} must not be empty")
+    if _contains_control(value):
+        raise ScaffoldError(f"{label} must be one line and contain no control characters")
+    if "{" in value or "}" in value:
+        raise ScaffoldError(f"{label} must not contain template delimiters")
+    return value
+
+
+def validate_project_name(name: str) -> str:
+    _validate_single_line("name", name)
+    if len(name) > 80:
+        raise ScaffoldError("name must be 80 characters or fewer")
+    if PROJECT_NAME_PATTERN.fullmatch(name) is None:
+        raise ScaffoldError("name must match ^[A-Za-z][A-Za-z0-9_]*$ for CMake and C++ identifiers")
+    return name
+
+
+def normalize_vcpkg_name(name: str) -> str:
+    normalized = re.sub(r"_+", "-", name.lower()).strip("-")
+    if re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", normalized) is None:
+        raise ScaffoldError(f"name {name!r} cannot be normalized to a valid vcpkg package name")
+    return normalized
+
+
+def validate_author(author: str) -> str:
+    _validate_single_line("author", author)
+    if len(author) > 120:
+        raise ScaffoldError("author must be 120 characters or fewer")
+    unsafe = sorted(set(author).intersection({'"', "\\", ";", "$"}))
+    if unsafe:
+        rendered = ", ".join(repr(character) for character in unsafe)
+        raise ScaffoldError(f"author contains characters unsafe for generated CMake/C++ metadata: {rendered}")
+    return author
+
+
+def validate_description(description: str) -> str:
+    _validate_single_line("description", description)
+    if len(description) > 240:
+        raise ScaffoldError("description must be 240 characters or fewer")
+    return description
 
 
 def parse_version(version: str) -> tuple[str, str, str]:
-    m = re.match(r"^(\d+)\.(\d+)\.(\d+)$", version)
-    if not m:
-        fail(f"version must look like 1.0.0, got: {version!r}")
-    return m.group(1), m.group(2), m.group(3)
+    _validate_single_line("version", version)
+    match = VERSION_PATTERN.fullmatch(version)
+    if match is None:
+        raise ScaffoldError(f"version must look like 1.0.0, got: {version!r}")
+    if any(int(component) > 65535 for component in match.groups()):
+        raise ScaffoldError("version components must be between 0 and 65535 for Windows VERSIONINFO")
+    return match.group(1), match.group(2), match.group(3)
+
+
+def validate_baseline(baseline: str) -> str:
+    _validate_single_line("baseline", baseline)
+    if BASELINE_PATTERN.fullmatch(baseline) is None:
+        raise ScaffoldError("baseline must be exactly 40 hexadecimal characters")
+    return baseline.lower()
+
+
+def parse_features(raw_features: str) -> tuple[str, ...]:
+    _validate_single_line("features", raw_features, allow_empty=True)
+    requested = [feature.strip() for feature in raw_features.split(",") if feature.strip()]
+    duplicates = sorted({feature for feature in requested if requested.count(feature) > 1})
+    if duplicates:
+        raise ScaffoldError(f"duplicate features: {', '.join(duplicates)}")
+    unknown = sorted(feature for feature in requested if feature not in FEATURES)
+    if unknown:
+        raise ScaffoldError(f"unknown features: {', '.join(unknown)}; available: {', '.join(FEATURES)}")
+    requested_set = set(requested)
+    for feature in FEATURES:
+        if feature not in requested_set:
+            continue
+        missing = [dependency for dependency in FEATURES[feature]["depends"] if dependency not in requested_set]
+        if missing:
+            raise ScaffoldError(
+                f"feature '{feature}' requires missing features: {', '.join(missing)} "
+                f"(add --features {','.join([*missing, feature])})"
+            )
+    return tuple(feature for feature in FEATURES if feature in requested_set)
+
+
+def generation_date_from_environment() -> str:
+    source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if source_date_epoch is None:
+        return datetime.now().astimezone().strftime("%Y/%m/%d")
+    if re.fullmatch(r"\d+", source_date_epoch) is None:
+        raise ScaffoldError("SOURCE_DATE_EPOCH must be a non-negative integer when set")
+    try:
+        timestamp = datetime.fromtimestamp(int(source_date_epoch), tz=timezone.utc)
+    except (OverflowError, OSError, ValueError) as error:
+        raise ScaffoldError("SOURCE_DATE_EPOCH is outside the supported timestamp range") from error
+    return timestamp.strftime("%Y/%m/%d")
+
+
+def cmake_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace(";", "\\;")
+
+
+def _placeholder_details(text: str) -> list[tuple[str, str]]:
+    return [(match.group(0), match.group(1).strip()) for match in PLACEHOLDER_CANDIDATE_PATTERN.finditer(text)]
+
+
+def validate_template_placeholders(text: str, allowed_keys: frozenset[str]) -> None:
+    for raw, key in _placeholder_details(text):
+        if PLACEHOLDER_KEY_PATTERN.fullmatch(key) is None:
+            raise ScaffoldError(f"malformed template placeholder: {raw!r}")
+        expected = "{{" + key + "}}"
+        if raw != expected:
+            raise ScaffoldError(f"malformed spaced template placeholder {raw!r}; use {expected!r}")
+        if key not in allowed_keys:
+            raise ScaffoldError(f"unknown template placeholder: {expected}")
 
 
 def substitute(text: str, values: dict[str, str], ignore: frozenset[str] = frozenset()) -> str:
-    """Replace {{KEY}} placeholders; fail loudly on any leftover placeholder.
-
-    `ignore` holds keys that are substituted later by subst_in_place() (line-level
-    placeholders whose replacement must preserve the placeholder line's indent).
-    """
+    validate_template_placeholders(text, frozenset(values).union(ignore))
     for key, value in values.items():
         text = text.replace("{{" + key + "}}", value)
-    leftovers = [p for p in re.findall(r"\{\{[A-Za-z_][A-Za-z0-9_]*\}\}", text) if p[2:-2] not in ignore]
+    leftovers = [raw for raw, key in _placeholder_details(text) if key not in ignore]
     if leftovers:
-        fail(f"unsubstituted template placeholders: {sorted(set(leftovers))}")
+        raise ScaffoldError(f"unsubstituted template placeholders: {sorted(set(leftovers))}")
     return text
 
 
-def write_newline(path: Path, content: str) -> None:
-    """Write with CRLF (like the source projects)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\r\n") as f:
-        f.write(content)
+def substitute_lines(content: str, replacements: dict[str, list[str]]) -> str:
+    result: list[str] = []
+    for line in content.splitlines(keepends=True):
+        stripped = line.strip()
+        matching_key = next((key for key in replacements if stripped == "{{" + key + "}}"), None)
+        if matching_key is None:
+            result.append(line)
+            continue
+        indent = line[: len(line) - len(line.lstrip())]
+        block = "\n".join(indent + replacement for replacement in replacements[matching_key])
+        result.append(block + ("\n" if line.endswith("\n") else ""))
+    rendered = "".join(result)
+    if _placeholder_details(rendered) or "{{" in rendered:
+        raise ScaffoldError("unsubstituted template placeholder remains after line substitution")
+    return rendered
 
 
-def build_src_cmake_lists(features: list[str]) -> str:
+def expected_output_files(features: Sequence[str]) -> set[Path]:
+    files = {
+        Path(".gitignore"),
+        Path("CMakeLists.txt"),
+        Path("CMakePresets.json"),
+        Path("LICENSE"),
+        Path("README.md"),
+        Path("vcpkg.json"),
+        Path("cmake/Plugin.h.in"),
+        Path("cmake/packaging.cmake"),
+        Path("cmake/version.rc.in"),
+        Path("src/CMakeLists.txt"),
+        Path("src/main.cpp"),
+        Path("src/pch.h"),
+    }
+    for feature in features:
+        files.update(Path(path) for path in FEATURES[feature]["files"])
+    return files
+
+
+def _dependency_json_body() -> str:
+    lines = json.dumps(BASE_VCPKG_DEPENDENCIES, indent=2).splitlines()
+    return "\n".join("  " + line for line in lines[1:-1])
+
+
+def render_project(options: ScaffoldOptions) -> dict[Path, str]:
+    major, minor, patch = parse_version(options.version)
+    runtime_values = RUNTIMES[options.runtimes]
+    includes: list[str] = []
+    load_glue: list[str] = []
+    dataloaded_glue: list[str] = []
     source_files = ["${SOURCE_DIR}/main.cpp"]
     header_files = ["${SOURCE_DIR}/pch.h"]
-    cmake_find: list[str] = []
-    link_libs: list[str] = ["spdlog::spdlog", "fmt::fmt", "CommonLibSSE::CommonLibSSE"]
+    find_packages = ["find_package(fmt CONFIG REQUIRED)", "find_package(spdlog CONFIG REQUIRED)"]
+    include_directories: list[str] = []
+    link_libraries = ["fmt::fmt", "spdlog::spdlog"]
+    for feature in options.features:
+        includes.extend(FEATURES[feature]["includes"])
+        load_glue.extend(FEATURES[feature]["load_glue"])
+        dataloaded_glue.extend(FEATURES[feature]["dataloaded_glue"])
+        for relative_path in FEATURES[feature]["files"]:
+            generated_path = "${SOURCE_DIR}/" + relative_path.split("/", 1)[1]
+            (source_files if relative_path.endswith(".cpp") else header_files).append(generated_path)
+        find_packages.extend(FEATURES[feature]["cmake_find"])
+        include_directories.extend(FEATURES[feature]["include_dirs"])
+        link_libraries.extend(FEATURES[feature]["link"])
+    hotkey_enabled = "hotkey" in options.features
+    line_values = {
+        "FEATURE_INCLUDES": includes,
+        "ON_LOAD": load_glue,
+        "ON_DATALOADED": dataloaded_glue,
+        "RENDERER_EXTRA_INCLUDES": ['#include "input.h"'] if hotkey_enabled else [],
+        "ON_PRESENT_BODY": ["Input::poll();"] if hotkey_enabled else [],
+        "SOURCE_FILES": source_files,
+        "HEADER_FILES": header_files,
+        "FEATURE_FIND_PACKAGES": list(dict.fromkeys(find_packages)),
+        "FEATURE_INCLUDE_DIRECTORIES": list(dict.fromkeys(include_directories)),
+        "FEATURE_LINK_LIBRARIES": list(dict.fromkeys(link_libraries)),
+    }
+    values = {
+        "PROJECT_NAME": options.name,
+        "PROJECT_NAME_LOWER": normalize_vcpkg_name(options.name),
+        "PROJECT_VERSION": options.version,
+        "PROJECT_VERSION_MAJOR": major,
+        "PROJECT_VERSION_MINOR": minor,
+        "PROJECT_VERSION_PATCH": patch,
+        "AUTHOR": options.author,
+        "AUTHOR_CMAKE": cmake_escape(options.author),
+        "DESCRIPTION": options.description,
+        "DESCRIPTION_CMAKE": cmake_escape(options.description),
+        "ENABLE_SKYRIM_SE": runtime_values["SE"],
+        "ENABLE_SKYRIM_AE": runtime_values["AE"],
+        "ENABLE_SKYRIM_VR": runtime_values["VR"],
+        "RUNTIME_SELECTION": options.runtimes,
+        "FEATURE_SELECTION": ", ".join(options.features) if options.features else "none",
+        "VCPKG_BASELINE": options.baseline,
+        "VCPKG_DEPENDENCIES": _dependency_json_body(),
+        "DATE": options.generation_date,
+    }
+    if frozenset(values) != TEMPLATE_VALUE_KEYS:
+        raise ScaffoldError("internal template value key set is inconsistent")
 
-    for feat in features:
-        for f in FEATURES[feat]["files"]:
-            if f.endswith(".cpp"):
-                source_files.append(f"${{SOURCE_DIR}}/{f.split('/', 1)[1]}")
-            else:
-                header_files.append(f"${{SOURCE_DIR}}/{f.split('/', 1)[1]}")
-        cmake_find.extend(FEATURES[feat]["cmake_find"])
-        link_libs.extend(FEATURES[feat]["link"])
+    def read_template(relative_path: str) -> str:
+        try:
+            return (TEMPLATE_DIR / relative_path).read_text(encoding="utf-8")
+        except OSError as error:
+            raise ScaffoldError(f"cannot read template {relative_path}: {error}") from error
 
-    def lines(items: list[str], indent: str = "    ") -> str:
-        return "\n".join(indent + i for i in items)
+    rendered: dict[Path, str] = {}
+    for relative_path in ["CMakeLists.txt", "CMakePresets.json", "vcpkg.json", "README.md", "LICENSE", ".gitignore"]:
+        rendered[Path(relative_path)] = substitute(read_template(relative_path), values)
+    for filename in ["packaging.cmake", "Plugin.h.in", "version.rc.in"]:
+        relative_path = f"cmake/{filename}"
+        rendered[Path(relative_path)] = substitute(read_template(relative_path), values)
 
-    return f"""set(ROOT_DIR "${{CMAKE_CURRENT_SOURCE_DIR}}/..")
-set(SOURCE_DIR "${{ROOT_DIR}}/src")
+    line_templates = {
+        "src/main.cpp": ("FEATURE_INCLUDES", "ON_LOAD", "ON_DATALOADED"),
+        "src/CMakeLists.txt": (
+            "SOURCE_FILES",
+            "HEADER_FILES",
+            "FEATURE_FIND_PACKAGES",
+            "FEATURE_INCLUDE_DIRECTORIES",
+            "FEATURE_LINK_LIBRARIES",
+        ),
+    }
+    for relative_path, keys in line_templates.items():
+        content = substitute(read_template(relative_path), values, LINE_PLACEHOLDER_KEYS)
+        rendered[Path(relative_path)] = substitute_lines(content, {key: line_values[key] for key in keys})
+    rendered[Path("src/pch.h")] = substitute(read_template("src/pch.h"), values)
 
-# 小型稳定目标：显式列出 sources，避免 GLOB 在新增文件后静默过期
-set(SOURCE_FILES
-{lines(source_files)}
-)
-set(HEADER_FILES
-{lines(header_files)}
-)
+    for feature in options.features:
+        for relative_path in FEATURES[feature]["files"]:
+            feature_template = FEATURES_DIR / feature / relative_path
+            try:
+                content = feature_template.read_text(encoding="utf-8")
+            except OSError as error:
+                raise ScaffoldError(f"cannot read feature template {feature}/{relative_path}: {error}") from error
+            ignored = (
+                frozenset({"RENDERER_EXTRA_INCLUDES", "ON_PRESENT_BODY"})
+                if feature == "present_hook"
+                else frozenset()
+            )
+            content = substitute(content, values, ignored)
+            if feature == "present_hook" and relative_path.endswith("esp_renderer.cpp"):
+                content = substitute_lines(
+                    content,
+                    {
+                        "RENDERER_EXTRA_INCLUDES": line_values["RENDERER_EXTRA_INCLUDES"],
+                        "ON_PRESENT_BODY": line_values["ON_PRESENT_BODY"],
+                    },
+                )
+            rendered[Path(relative_path)] = content
 
-set(VERSION_HEADER "${{CMAKE_CURRENT_BINARY_DIR}}/src/Plugin.h")
-string(TIMESTAMP PLUGIN_BUILD_DATE "%Y/%m/%d")
-configure_file(
-    "${{ROOT_DIR}}/cmake/Plugin.h.in"
-    "${{VERSION_HEADER}}"
-    @ONLY
-)
+    for relative_path, content in rendered.items():
+        if _placeholder_details(content) or "{{" in content:
+            raise ScaffoldError(f"generated {relative_path.as_posix()} contains unresolved template syntax")
+    if set(rendered) != expected_output_files(options.features):
+        raise ScaffoldError("internal generated file set does not match the selected features")
+    try:
+        json.loads(rendered[Path("CMakePresets.json")])
+        json.loads(rendered[Path("vcpkg.json")])
+    except json.JSONDecodeError as error:
+        raise ScaffoldError(f"generated JSON is invalid: {error}") from error
+    return rendered
 
-configure_file(
-    "${{ROOT_DIR}}/cmake/version.rc.in"
-    "${{CMAKE_CURRENT_BINARY_DIR}}/version.rc"
-    @ONLY
-)
 
-source_group("Source" FILES ${{SOURCE_FILES}})
-source_group("Header" FILES ${{HEADER_FILES}} ${{VERSION_HEADER}})
+def _prepare_output_directory(output_dir: Path) -> None:
+    if output_dir.exists():
+        if output_dir.is_symlink():
+            raise ScaffoldError(f"output directory must not be a symbolic link: {output_dir}")
+        if not output_dir.is_dir():
+            raise ScaffoldError(f"output path is not a directory: {output_dir}")
+        if any(output_dir.iterdir()):
+            raise ScaffoldError(f"output directory not empty: {output_dir}")
 
-add_library(
-    ${{PROJECT_NAME}}
-    SHARED
-    ${{HEADER_FILES}}
-    ${{SOURCE_FILES}}
-    ${{VERSION_HEADER}}
-    ${{CMAKE_CURRENT_BINARY_DIR}}/version.rc
-)
 
-target_compile_features(
-    ${{PROJECT_NAME}}
-    PRIVATE
-    cxx_std_23
-)
+def write_project(output_dir: Path, rendered: dict[Path, str]) -> None:
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for relative_path in sorted(rendered, key=lambda path: path.as_posix()):
+            path = output_dir / relative_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("x", encoding="utf-8", newline="\r\n") as output_file:
+                output_file.write(rendered[relative_path])
+    except OSError as error:
+        raise ScaffoldError(f"failed to write scaffold at {output_dir}: {error}") from error
 
-# Align the MSVC toolset with the one vcpkg uses for dependencies (spdlog).
-# CMake 3.31 drops the `version=` clause from CMAKE_GENERATOR_TOOLSET and writes
-# a plain `v143`, which resolves to an older toolset (14.38) whose STL lacks the
-# vectorized symbols 14.44 objects reference, causing LNK2019 at link time.
-set_target_properties(
-    ${{PROJECT_NAME}}
-    PROPERTIES
-    VS_GLOBAL_VCToolsVersion "14.44.35207"
-)
 
-if("${{CMAKE_CXX_COMPILER_ID}}" STREQUAL "MSVC")
-    target_compile_options(
-        ${{PROJECT_NAME}}
-        PRIVATE
-        "/sdl"
-        "/utf-8"
-        "/Zi"
-        "/permissive-"
-        "/Zc:preprocessor"
-        "/wd4200"
-        "$<$<CONFIG:DEBUG>:/ZI>"
-        "$<$<CONFIG:RELEASE>:/Zi;/Zc:inline;/JMC-;/Ob3>"
+def setup_git(output_dir: Path, *, git_init: bool, add_commonlib_submodule: bool) -> None:
+    if not git_init and not add_commonlib_submodule:
+        return
+    try:
+        subprocess.run(["git", "init"], cwd=output_dir, check=True)
+        if add_commonlib_submodule:
+            subprocess.run(COMMONLIB_SUBMODULE_COMMAND, cwd=output_dir, check=True)
+    except FileNotFoundError as error:
+        raise ScaffoldError("git executable was not found; install Git or omit the Git option") from error
+    except subprocess.CalledProcessError as error:
+        command = subprocess.list2cmdline(error.cmd)
+        raise ScaffoldError(f"Git command failed with exit {error.returncode}: {command}") from error
+
+
+def create_project(options: ScaffoldOptions) -> dict[Path, str]:
+    _prepare_output_directory(options.output_dir)
+    rendered = render_project(options)
+    write_project(options.output_dir, rendered)
+    setup_git(
+        options.output_dir,
+        git_init=options.git_init,
+        add_commonlib_submodule=options.add_commonlib_submodule,
     )
-
-    target_compile_definitions(
-        ${{PROJECT_NAME}}
-        PRIVATE
-        NOMINMAX
-    )
-
-    target_link_options(
-        ${{PROJECT_NAME}}
-        PRIVATE
-        "$<$<CONFIG:DEBUG>:/INCREMENTAL;/OPT:NOREF;/OPT:NOICF>"
-        "$<$<CONFIG:RELEASE>:/INCREMENTAL:NO;/OPT:REF;/OPT:ICF;/DEBUG:FULL>"
-    )
-endif()
-
-target_include_directories(
-    ${{PROJECT_NAME}}
-    PRIVATE
-    ${{CMAKE_CURRENT_BINARY_DIR}}/src
-    ${{SOURCE_DIR}}
-)
-
-# dependency macros
-macro(find_dependency_path DEPENDENCY FILE)
-    if(NOT ${{DEPENDENCY}} STREQUAL "")
-        message(STATUS "Searching for ${{DEPENDENCY}} using file ${{FILE}}")
-        find_path(PATH
-            ${{FILE}}
-            PATHS
-            "../extern/${{DEPENDENCY}}"
-            "extern/${{DEPENDENCY}}"
-            "../external/${{DEPENDENCY}}"
-            "external/${{DEPENDENCY}}")
-        set("${{DEPENDENCY}}Path" "${{PATH}}")
-        if("${{${{DEPENDENCY}}Path}}" STREQUAL "PATH-NOTFOUND")
-            message(STATUS "Getting environment variable for ${{DEPENDENCY}}Path: $ENV{{${{DEPENDENCY}}Path}}")
-            set("${{DEPENDENCY}}Path" "$ENV{{${{DEPENDENCY}}Path}}")
-        endif()
-        if (NOT "${{${{DEPENDENCY}}Path}}" STREQUAL "")
-            message(STATUS "Found ${{DEPENDENCY}} in ${{${{DEPENDENCY}}Path}}; adding")
-            add_subdirectory("${{${{DEPENDENCY}}Path}}" ${{DEPENDENCY}})
-        endif()
-    endif()
-endmacro()
-
-# dependencies
-find_dependency_path(CommonLibSSE include/REL/Relocation.h)
-
-if(("${{CommonLibSSEPath}}" STREQUAL "CommonLibSSEPath-NOTFOUND") OR "${{CommonLibSSEPath}}" STREQUAL "")
-    # fallback to CommonLibSSEPath_NG from environment
-    message(STATUS "Found CommonLibSSE from CommonLibSSEPath_NG environment variable")
-    add_subdirectory("$ENV{{CommonLibSSEPath_NG}}" CommonLibSSE EXCLUDE_FROM_ALL)
-endif()
-
-# CommonLibSSE 由本仓库源码构建时，SKSE_SUPPORT_PATCH_SAFETY=OFF 下
-# Trampoline.cpp 有无用形参（C4100），与全局 /WX 冲突。在项目侧静默该警告，
-# 保持三方库源码原样（不改 extern/CommonLibSSE）。
-if(TARGET CommonLibSSE AND MSVC)
-    target_compile_options(CommonLibSSE PRIVATE /wd4100)
-endif()
-
-find_package(spdlog CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
-{'' if not cmake_find else '\n'.join('find_package(' + c + ')' for c in cmake_find)}
-
-target_link_libraries(
-    ${{PROJECT_NAME}}
-    PRIVATE
-{lines(link_libs)}
-)
-
-target_precompile_headers(
-    ${{PROJECT_NAME}}
-    PRIVATE
-    ${{SOURCE_DIR}}/pch.h
-)
-
-install(
-    FILES
-        "$<TARGET_FILE:${{PROJECT_NAME}}>"
-    DESTINATION "SKSE/Plugins"
-    COMPONENT "main"
-)
-
-install(
-    FILES
-        "$<TARGET_PDB_FILE:${{PROJECT_NAME}}>"
-    DESTINATION "/"
-    COMPONENT "pdbs"
-)
-
-if("${{COPY_OUTPUT}}")
-    add_custom_command(
-        TARGET
-        "${{PROJECT_NAME}}"
-        POST_BUILD
-        COMMAND
-        "${{CMAKE_COMMAND}}" -E copy_if_different "$<TARGET_FILE:${{PROJECT_NAME}}>" "${{CompiledPluginsPath}}/SKSE/Plugins/"
-        COMMAND
-        "${{CMAKE_COMMAND}}" -E copy_if_different "$<TARGET_PDB_FILE:${{PROJECT_NAME}}>" "${{CompiledPluginsPath}}/SKSE/Plugins/"
-        VERBATIM
-    )
-endif()
-"""
+    return rendered
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate a new Skyrim SKSE plugin (multi-runtime SE/AE/VR via CommonLibSSE).",
+        description="Generate a CommonLibSSE-NG Skyrim SE/AE/VR plugin.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Available --features (comma separated): " + ", ".join(FEATURES) + "\n"
             "Available --runtimes: " + ", ".join(RUNTIMES)
         ),
     )
-    parser.add_argument("--name", required=True, help="plugin/project name (DLL, CMake project, log name)")
-    parser.add_argument("--author", default="Your Name", help="author shown in SKSEPlugin_Version")
-    parser.add_argument("--description", default="A Skyrim SKSE plugin.", help="one-line description")
-    parser.add_argument("--version", default="1.0.0", help="version like 1.0.0")
-    parser.add_argument("--runtimes", default="all", choices=sorted(RUNTIMES), help="runtime set to compile in")
+    parser.add_argument("--name", required=True, help="safe CMake/C++ plugin identifier")
+    parser.add_argument("--author", default="Your Name", help="author for generated plugin metadata")
+    parser.add_argument("--description", default="A Skyrim SKSE plugin.", help="one-line project description")
+    parser.add_argument("--version", default="1.0.0", help="three-part version such as 1.0.0")
+    parser.add_argument("--runtimes", default="all", choices=sorted(RUNTIMES), help="runtime set compiled into the DLL")
+    parser.add_argument("--features", default="", help="comma-separated feature modules")
     parser.add_argument(
-        "--features",
-        default="",
-        help="comma separated feature modules, e.g. config,hotkey,present_hook,vtable_hook,event_sink",
+        "--commonlib",
+        default="ng",
+        help="CommonLib implementation; only ng from alandtse/CommonLibSSE-NG is supported",
     )
-    parser.add_argument("--commonlib", default="ng", choices=sorted(COMMONLIB_URLS), help="CommonLibSSE variant")
-    parser.add_argument("--baseline", default=DEFAULT_VCPKG_BASELINE, help="vcpkg builtin-baseline")
-    parser.add_argument("--dir", default=None, help="output directory (default: ./<name>)")
-    parser.add_argument("--git-init", action="store_true", help="run `git init` in the generated project")
-    args = parser.parse_args()
+    parser.add_argument("--baseline", default=DEFAULT_VCPKG_BASELINE, help="40-hex vcpkg builtin baseline")
+    parser.add_argument("--dir", default=None, help="empty output directory (default: ./<name>)")
+    parser.add_argument("--git-init", action="store_true", help="run local-only git init; performs no network access")
+    parser.add_argument(
+        "--add-commonlib-submodule",
+        action="store_true",
+        help="NETWORK: initialize Git and add CommonLibSSE-NG branch ng as a real submodule",
+    )
+    return parser
 
-    if not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", args.name):
-        fail("name must match ^[A-Za-z][A-Za-z0-9_]*$")
 
-    features = [f.strip() for f in args.features.split(",") if f.strip()]
-    unknown = [f for f in features if f not in FEATURES]
-    if unknown:
-        fail(f"unknown features: {unknown}; available: {', '.join(FEATURES)}")
-    # 依赖检查：hotkey 需要 config
-    if "hotkey" in features and "config" not in features:
-        fail("feature 'hotkey' requires feature 'config' (add --features config,hotkey)")
-    # present_hook + hotkey：热键在 on_present 中轮询
-    present_plus_hotkey = "present_hook" in features and "hotkey" in features
+def options_from_args(args: argparse.Namespace) -> ScaffoldOptions:
+    name = validate_project_name(args.name)
+    author = validate_author(args.author)
+    description = validate_description(args.description)
+    parse_version(args.version)
+    baseline = validate_baseline(args.baseline)
+    if args.commonlib != "ng":
+        raise ScaffoldError(
+            "--commonlib supports only ng from alandtse/CommonLibSSE-NG; the legacy VR fork is unsupported"
+        )
+    if args.dir is not None:
+        _validate_single_line("dir", args.dir)
+    return ScaffoldOptions(
+        name=name,
+        author=author,
+        description=description,
+        version=args.version,
+        runtimes=args.runtimes,
+        features=parse_features(args.features),
+        baseline=baseline,
+        output_dir=Path(args.dir) if args.dir else Path.cwd() / name,
+        git_init=args.git_init,
+        add_commonlib_submodule=args.add_commonlib_submodule,
+        generation_date=generation_date_from_environment(),
+    )
 
-    out_dir = Path(args.dir) if args.dir else Path.cwd() / args.name
-    if out_dir.exists() and any(out_dir.iterdir()):
-        fail(f"output directory not empty: {out_dir}")
-    out_dir.mkdir(parents=True, exist_ok=True)
 
-    maj, minor, patch = parse_version(args.version)
-    name_lower = args.name.lower()
-
-    # 预计算功能相关片段
-    vcpkg_extra = ""
-    all_vcpkg_deps: list[str] = []
-    for feat in features:
-        for dep in FEATURES[feat]["vcpkg_deps"]:
-            if dep not in all_vcpkg_deps:
-                all_vcpkg_deps.append(dep)
-    if all_vcpkg_deps:
-        vcpkg_extra = ",\n    " + ",\n    ".join('"%s"' % d for d in all_vcpkg_deps)
-
-    # main.cpp 依赖 PCH 强制注入（target_precompile_headers），这里只追加功能模块头
-    includes: list[str] = []
-    for feat in features:
-        includes.extend(FEATURES[feat]["includes"])
-    load_glue: list[str] = []
-    dataloaded_glue: list[str] = []
-    for feat in features:
-        load_glue.extend(FEATURES[feat]["load_glue"])
-        dataloaded_glue.extend(FEATURES[feat]["dataloaded_glue"])
-
-    renderer_extra_includes = ['#include "input.h"'] if present_plus_hotkey else []
-    on_present_body = ["Input::poll();"] if present_plus_hotkey else []
-
-    commonlib_url = COMMONLIB_URLS[args.commonlib]
-    commonlib_branch = "ng"
-
-    def read_template(rel: str) -> str:
-        return (TEMPLATE_DIR / rel).read_text(encoding="utf-8")
-
-    def subst_in_place(content: str, line_indent_placeholders: dict[str, list[str]]) -> str:
-        """Replace whole placeholder lines, preserving the placeholder line's leading indent."""
-        result = []
-        for line in content.splitlines(keepends=True):
-            stripped = line.strip()
-            ph = next((p for p in line_indent_placeholders if stripped == "{{" + p + "}}"), None)
-            if ph is None:
-                result.append(line)
-                continue
-            indent = line[: len(line) - len(line.lstrip())]
-            glue = line_indent_placeholders[ph]
-            block = "\n".join(indent + g for g in glue) if glue else ""
-            result.append(block + ("\n" if line.endswith("\n") else ""))
-        return "".join(result)
-
-    # 通用 {{KEY}} 替换
-    values = {
-        "PROJECT_NAME": args.name,
-        "PROJECT_NAME_LOWER": name_lower,
-        "PROJECT_VERSION": args.version,
-        "PROJECT_VERSION_MAJOR": maj,
-        "PROJECT_VERSION_MINOR": minor,
-        "PROJECT_VERSION_PATCH": patch,
-        "AUTHOR": args.author,
-        "DESCRIPTION": args.description,
-        "COMMONLIB_URL": commonlib_url,
-        "COMMONLIB_BRANCH": commonlib_branch,
-        "ENABLE_SKYRIM_SE": RUNTIMES[args.runtimes]["SE"],
-        "ENABLE_SKYRIM_AE": RUNTIMES[args.runtimes]["AE"],
-        "ENABLE_SKYRIM_VR": RUNTIMES[args.runtimes]["VR"],
-        "VCPKG_BASELINE": args.baseline,
-        "VCPKG_EXTRA_DEPS": vcpkg_extra,
-        "DATE": date.today().strftime("%Y/%m/%d"),
-    }
-
-    # 行级占位符（保持缩进）
-    line_placeholders: dict[str, list[str]] = {
-        "FEATURE_INCLUDES": includes,
-        "ON_LOAD": load_glue,
-        "ON_DATALOADED": dataloaded_glue,
-        "RENDERER_EXTRA_INCLUDES": renderer_extra_includes,
-        "ON_PRESENT_BODY": on_present_body,
-    }
-
-    # 顶层核心模板（templates/*）
-    core_files = [
-        "CMakeLists.txt",
-        "CMakePresets.json",
-        "vcpkg.json",
-        "README.md",
-        ".gitignore",
-        ".gitmodules",
-    ]
-    for rel in core_files:
-        content = substitute(read_template(rel), values)
-        write_newline(out_dir / rel, content)
-
-    # cmake/
-    for rel in ["packaging.cmake", "Plugin.h.in", "version.rc.in"]:
-        content = substitute(read_template(f"cmake/{rel}"), values)
-        write_newline(out_dir / "cmake" / rel, content)
-
-    # src/main.cpp 与 pch.h（含行级占位符）
-    for rel, ph in [("src/main.cpp", line_placeholders), ("src/pch.h", {})]:
-        content = substitute(read_template(rel), values, ignore=frozenset(line_placeholders))
-        if ph:
-            content = subst_in_place(content, {k: v for k, v in ph.items() if v is not None})
-        write_newline(out_dir / rel, content)
-
-    # 功能模块
-    for feat in features:
-        for rel in FEATURES[feat]["files"]:
-            src = FEATURES_DIR / feat / rel
-            content = substitute(
-                src.read_text(encoding="utf-8"),
-                values,
-                ignore=frozenset({"RENDERER_EXTRA_INCLUDES", "ON_PRESENT_BODY"}),
-            )
-            if rel.endswith("esp_renderer.cpp"):
-                content = subst_in_place(
-                    content,
-                    {
-                        "RENDERER_EXTRA_INCLUDES": renderer_extra_includes,
-                        "ON_PRESENT_BODY": on_present_body,
-                    },
-                )
-            write_newline(out_dir / rel, content)
-
-    # 生成 src/CMakeLists.txt
-    write_newline(out_dir / "src" / "CMakeLists.txt", build_src_cmake_lists(features))
-
-    # git init（可选）
-    if args.git_init:
-        subprocess.run(["git", "init", str(out_dir)], check=False)
-
-    # 汇总
-    print(f"Scaffolded SKSE plugin at: {out_dir}")
-    print(f"  name:      {args.name}")
-    print(f"  author:    {args.author}")
-    print(f"  version:   {args.version}")
-    print(f"  runtimes:  {args.runtimes} (SE={RUNTIMES[args.runtimes]['SE']}, AE={RUNTIMES[args.runtimes]['AE']}, VR={RUNTIMES[args.runtimes]['VR']})")
-    print(f"  commonlib: {commonlib_url}")
-    print(f"  features:  {', '.join(features) if features else '(none)'}")
-    print()
-    print("Next steps:")
-    print(f"  cd {out_dir}")
+def print_summary(options: ScaffoldOptions) -> None:
+    runtime_values = RUNTIMES[options.runtimes]
+    print(f"Scaffolded SKSE plugin at: {options.output_dir}")
+    print(f"  name:      {options.name}")
+    print(f"  package:   {normalize_vcpkg_name(options.name)}")
+    print(f"  author:    {options.author}")
+    print(f"  version:   {options.version}")
+    print(
+        f"  runtimes:  {options.runtimes} "
+        f"(SE={runtime_values['SE']}, AE={runtime_values['AE']}, VR={runtime_values['VR']})"
+    )
+    print(f"  commonlib: {COMMONLIB_URL} (branch {COMMONLIB_BRANCH})")
+    print(f"  features:  {', '.join(options.features) if options.features else '(none)'}")
+    print("\nNext steps:")
+    print(f"  cd {options.output_dir}")
+    if not options.git_init and not options.add_commonlib_submodule:
+        print("  git init")
+    if not options.add_commonlib_submodule:
+        print("  " + subprocess.list2cmdline(COMMONLIB_SUBMODULE_COMMAND))
     print("  git submodule update --init --recursive")
     print('  cmake --preset "msvc release"')
     print('  cmake --build --preset "msvc release"')
+    if options.add_commonlib_submodule:
+        print("  commit both .gitmodules and the extern/CommonLibSSE gitlink")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        options = options_from_args(args)
+        create_project(options)
+    except (OSError, ScaffoldError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    print_summary(options)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -4,7 +4,7 @@ revision: {{REVISION}}
 status: "APPROVED"
 created_at: "{{ISO_8601_TIMESTAMP}}"
 supersedes: null
-protocol_version: "0.4"
+protocol_version: "0.5"
 host_adapter: "{{VERIFIED_HOST_ADAPTER_ID}}"
 adapter_version: "{{VERIFIED_ADAPTER_VERSION}}"
 implementation_model: "{{USER_APPROVED_MODEL_OR_INHERIT_PARENT}}"
@@ -55,6 +55,19 @@ baseline_revision: "{{GIT_REVISION_OR_NOT_APPLICABLE}}"
 
 `none` is the safe default for both authorities. Replace commit authority only with exact user approval for this logical boundary. Replace push authority only with separate exact user approval and set the remote and refspec in Push target. Approval of this contract or implementation does not imply either authority.
 
+## Documentation
+
+- Documentation impact: `{{CREATE_UPDATE_OR_NOT_REQUIRED}}`
+- Policy reason: `{{CANONICAL_DOCUMENTATION_POLICY_REASON}}`
+- Canonical feature document: `{{REPOSITORY_RELATIVE_PATH_OR_NOT_APPLICABLE}}`
+- Feature index: `{{REPOSITORY_RELATIVE_PATH_OR_NOT_APPLICABLE}}`
+- Code entry points: `{{PATHS_AND_STABLE_SYMBOLS_OR_NOT_APPLICABLE}}`
+- Test entry points: `{{PATHS_AND_TEST_TARGETS_OR_NOT_APPLICABLE}}`
+- Required sections: `{{SECTIONS_OR_NOT_APPLICABLE}}`
+- Validation obligations: `{{LINK_PATH_SYMBOL_CONTENT_AND_FRESHNESS_CHECKS_OR_NOT_APPLICABLE}}`
+
+Use exactly `create`, `update`, or `not-required`. For `create` and `update`, every path and validation field is implementation authority and must be completed atomically with code, tests, necessary Changelog, and configuration. For `not-required`, record a stable policy reason and use explicit `not-applicable` values rather than leaving fields unresolved.
+
 ## Allowed paths
 
 - `{{PATH_OR_DIRECTORY}}`
@@ -95,3 +108,4 @@ List every bundled coding-rule component document the worker must load before it
 - Required permissions, tools, or external services are unavailable.
 - Existing user changes overlap the approved write scope without explicit authorization.
 - Acceptance criteria conflict or cannot be verified as written.
+- Required feature documentation cannot be made accurate within the approved paths or validation obligations.

@@ -17,5 +17,5 @@ namespace ESPRenderer
 void install();
 
 // 渲染线程：每次 Present 前调用，绘制覆盖层
-void on_present(IDXGISwapChain* a_swapChain);
+void on_present(IDXGISwapChain* a_swap_chain);
 }

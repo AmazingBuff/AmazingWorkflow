@@ -1,69 +1,39 @@
 {
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 22,
+        "patch": 0
+    },
     "configurePresets": [
         {
+            "name": "msvc release",
+            "displayName": "MSVC Release",
+            "generator": "Visual Studio 17 2022",
             "binaryDir": "${sourceDir}/build/${presetName}",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": {
-                    "type": "STRING",
-                    "value": "Release"
-                }
+            "installDir": "${sourceDir}/install/${presetName}",
+            "architecture": {
+                "value": "x64",
+                "strategy": "set"
             },
-            "errors": {
-                "deprecated": true
-            },
-            "hidden": true,
-            "name": "cmake-dev",
-            "warnings": {
-                "deprecated": true,
-                "dev": true
-            }
-        },
-        {
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": {
-                    "type": "STRING",
-                    "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-                }
-            },
-            "hidden": true,
-            "name": "vcpkg"
-        },
-        {
             "condition": {
                 "type": "equals",
                 "lhs": "${hostSystemName}",
                 "rhs": "Windows"
             },
             "cacheVariables": {
-                "CMAKE_MSVC_RUNTIME_LIBRARY": {
-                    "type": "STRING",
-                    "value": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
-                },
-                "VCPKG_TARGET_TRIPLET": {
-                    "type": "STRING",
-                    "value": "x64-windows-static-md"
-                }
-            },
-            "hidden": true,
-            "name": "windows"
-        },
-        {
-            "architecture": {
-                "strategy": "set",
-                "value": "x64"
-            },
-            "cacheVariables": {
-                "CMAKE_CXX_FLAGS": "/EHsc /MP /W4 /WX"
-            },
-            "generator": "Visual Studio 17 2022",
-            "inherits": [
-                "cmake-dev",
-                "vcpkg",
-                "windows"
-            ],
-            "name": "msvc release",
-            "toolset": "v143,version=14.44.35207"
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+            }
         }
     ],
-    "version": 3
+    "buildPresets": [
+        {
+            "name": "msvc release",
+            "displayName": "MSVC Release",
+            "configurePreset": "msvc release",
+            "configuration": "Release"
+        }
+    ]
 }

@@ -1,8 +1,8 @@
 # Two-Phase Coding Core Protocol
 
-Protocol version: `0.4`.
+Protocol version: `0.5`.
 
-This document defines the host-neutral contract, state, worktree, single-writer, and result rules. Host detection and execution mappings belong to the [Host Adapter Contract](adapter-contract.md) and the selected adapter reference.
+This document defines the host-neutral contract, state, worktree, single-writer, documentation, and result rules. Host detection and execution mappings belong to the [Host Adapter Contract](adapter-contract.md) and the selected adapter reference.
 
 ## Core invariants
 
@@ -10,10 +10,12 @@ This document defines the host-neutral contract, state, worktree, single-writer,
 - One implementation worker owns product-code writes to a worktree.
 - The workflow has exactly two phases: planning and implementation.
 - No product-code write occurs before contract and implementation-model approval.
+- Only a compatible adapter with `support_state: VERIFIED` may dispatch product-code writes.
 - An approved contract is the sole implementation authority and is never edited in place.
 - Model selection is explicit and is never silently substituted.
 - Permissions may be inherited or narrowed, never broadened by this workflow.
 - Version-control mutations require exact, separately recorded authority; contract or implementation approval alone grants none.
+- Required feature documentation is implementation material in the same logical change, not another phase.
 - `DONE`, `BLOCKED`, and `FAILED` are the only implementation result states.
 
 ## Contract rules
@@ -27,7 +29,7 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - `status` is `APPROVED` before dispatch.
 - `revision` is a positive integer.
 - `protocol_version` matches this Core protocol.
-- `host_adapter` identifies the single selected verified adapter.
+- `host_adapter` identifies the single selected compatible `VERIFIED` adapter.
 - `adapter_version` matches the adapter used for approval and dispatch.
 - Every requirement has a stable `R-<number>` id.
 - Every acceptance criterion has a stable `AC-<number>` id.
@@ -36,8 +38,9 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - Existing user changes that must be preserved are identified in the baseline or constraints.
 - Verification commands are real project commands, or the contract states why a check is manual.
 - `implementation_model` is the exact user-approved value. Parent inheritance is recorded only as `inherit-parent (user-approved)`.
-- A deployment that bundles coding-rule component documents records them in an `Applicable coding rules` section, one host-resolvable absolute path per entry, and the worker loads every listed document before its first edit; deployments without bundled components omit the section.
+- Applicable bundled coding-rule component documents are recorded one host-resolvable absolute path per entry, or the section records `None`; the worker loads every listed document before its first edit.
 - The Version control section records `git` or `none`. A Git-backed task also records the read-only baseline, one logical commit boundary, Changelog decision and proposed entry, proposed Conventional Commit message, commit authority, and separate push authority.
+- The Documentation section records Documentation Impact as `create`, `update`, or `not-required` with a canonical policy reason. For required maintenance it also records the canonical feature-document path, feature-index path, code and test entry points, required sections, and validation obligations; non-required fields use explicit safe not-applicable values.
 - Commit authority and push authority default to `none`. Any granted authority names the exact action and scope; push authority also names the remote and refspec.
 - Open product or architecture questions make the contract ineligible for approval.
 
@@ -55,8 +58,9 @@ Create a new revision when any of these changes:
 - destructive-operation authority;
 - acceptance criteria or verification obligations;
 - version-control system, logical commit boundary, Changelog disposition, proposed commit message, commit authority, or push authority;
+- Documentation Impact, policy reason, canonical document or index path, code or test entry points, required sections, or validation obligations;
 - implementation model, reasoning effort, host adapter, or adapter version;
-- the applicable coding rules set.
+- the applicable coding-rules set.
 
 Do not overwrite an approved contract. Mark an old revision `SUPERSEDED` only after its replacement is approved, and link the revisions through `supersedes`.
 
@@ -79,6 +83,7 @@ The Planner supplies the implementation worker with:
 - the absolute or host-resolvable location of this Core protocol;
 - task id and contract revision;
 - the adapter-validated implementation model and optional reasoning effort;
+- the absolute paths of every applicable coding-rule component document;
 - an instruction to treat the contract as the sole authority;
 - an instruction not to ask the user, expand scope, or create another writer;
 - an instruction to return exactly one result schema from this document.
@@ -104,6 +109,10 @@ The worker returns `BLOCKED` before touching overlapping user changes unless the
 
 The worker may read files, edit approved paths, and run in-scope formatting, build, static-analysis, test, and diagnostic tools. It may repair failures directly caused by the approved task when the repair remains within scope.
 
+Before its first edit, the worker reads every coding-rule component listed by the contract. An empty rule set is recorded as `None`; the worker never discovers a runtime dependency on another workflow specification.
+
+When Documentation Impact is `create` or `update`, the worker creates or updates the canonical feature document and feature index atomically with affected implementation, tests, necessary Changelog, and configuration. It validates the contract's document paths, code and test entry points, required sections, links, named symbols when applicable, and freshness obligations. Documentation explains durable intent and navigation; it never excuses unclear code, hidden coupling, or missing tests.
+
 The worker must not:
 
 - ask the user or make product decisions;
@@ -117,7 +126,7 @@ The worker must not:
 
 For a Git-backed task, the worker reads and follows the canonical [Git commit and Changelog convention](git-commit-convention.md). It preserves the recorded baseline and logical change boundary throughout implementation.
 
-- Maintain every required Changelog entry with the implementation, tests, documentation, and configuration that form the same logical change. If no entry is required, record the policy reason; never omit an entry merely because no Changelog file exists.
+- Maintain every required Changelog entry and required feature document or index update with the implementation, tests, and configuration that form the same logical change. If a Changelog or feature document is not required, record the applicable policy reason; never omit either merely because its default file does not yet exist.
 - Treat commit authority and push authority as `none` unless the approved contract grants each exact action separately. Approval of implementation, a model, an adapter, or the contract itself is not staging, commit, or push authority.
 - With commit authority `none`, do not modify the index or `HEAD`; report the proposed Conventional Commit message instead.
 - With explicit commit authority, call the selected adapter's `manage_version_control` operation, stage only the exact authorized paths, inspect the staged diff, validate the logical boundary and message, and commit only that boundary. Do not amend, squash, rebase, tag, or rewrite history unless separately authorized by the contract.
@@ -150,6 +159,14 @@ ACCEPTANCE_EVIDENCE:
 
 COMMANDS:
 - `<command>` — exit <code> — <result>
+
+DOCUMENTATION:
+- Decision: <create | update | not-required> — <policy reason>
+- Canonical document: <repository-relative path | not-applicable>
+- Feature index: <repository-relative path | not-applicable>
+- Navigation: <code and test entry points checked, including path and symbol evidence | not-applicable — reason>
+- Validation: <link, section, content, or repository check and result | not-applicable — reason>
+- Freshness: <current | not-applicable — reason>
 
 VERSION_CONTROL:
 - System: <git | none>
@@ -187,6 +204,14 @@ OPTIONS:
 RECOMMENDATION:
 <recommended option and reason>
 
+DOCUMENTATION:
+- Decision: <create | update | not-required> — <policy reason or current unresolved state>
+- Canonical document: <repository-relative path | not-applicable>
+- Feature index: <repository-relative path | not-applicable>
+- Navigation: <completed, pending, failed, or not-applicable evidence>
+- Validation: <completed, pending, failed, or not-applicable evidence>
+- Freshness: <current, stale, pending, or not-applicable — reason>
+
 VERSION_CONTROL:
 - System: <git | none>
 - Baseline: <recorded baseline | not applicable>
@@ -217,6 +242,14 @@ EVIDENCE:
 ATTEMPTS:
 - <attempt and result>
 
+DOCUMENTATION:
+- Decision: <create | update | not-required> — <policy reason>
+- Canonical document: <repository-relative path | not-applicable>
+- Feature index: <repository-relative path | not-applicable>
+- Navigation: <completed, failed, or not-applicable evidence>
+- Validation: <completed, failed, or not-applicable evidence>
+- Freshness: <current, stale, or not-applicable — reason>
+
 VERSION_CONTROL:
 - System: <git | none>
 - Baseline: <recorded baseline | not applicable>
@@ -244,12 +277,13 @@ For `DONE`, the Planner reports:
 4. changed files;
 5. acceptance evidence;
 6. commands and test results;
-7. version-control system and baseline, Changelog disposition, commit status or proposed message, and push status;
-8. unverified items and risks;
-9. contract location and revision.
+7. Documentation Impact, canonical document and index paths, navigation and validation evidence, and freshness status;
+8. version-control system and baseline, Changelog disposition, commit status or proposed message, and push status;
+9. unverified items and risks;
+10. contract location and revision.
 
 The Planner may inspect the diff and rerun read-only checks, but may not edit product code.
 
-## Protocol 0.4 compatibility
+## Protocol 0.5 compatibility
 
-Protocol `0.4` is additive over `0.3`: it adds the optional `Applicable coding rules` contract section, the matching dispatch-envelope entries, and an explicit-approval path for selecting one `EXPERIMENTAL` adapter (see the [Host Adapter Contract](adapter-contract.md)). Contracts written under `0.3` remain valid `0.4` contracts.
+Protocol `0.5` reconciles the coding-rule and feature-documentation additions into one release and closes implementation dispatch to every non-`VERIFIED` support state. Approved contracts remain immutable: continue an older contract only with its matching historical Core and adapter resources, or create and approve a new `0.5` revision. Do not pair a `0.5` Core with older adapter metadata through an implicit compatibility range.

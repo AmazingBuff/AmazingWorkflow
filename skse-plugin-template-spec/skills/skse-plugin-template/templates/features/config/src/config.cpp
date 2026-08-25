@@ -7,7 +7,6 @@
 #include <SimpleIni.h>
 
 #include <atomic>
-#include <cstdlib>
 
 namespace
 {
@@ -24,21 +23,6 @@ std::filesystem::path get_ini_path() noexcept
     auto const exe_path = REL::Module::get().filePath();  // SkyrimSE.exe 的完整路径（wstring_view）
     std::filesystem::path game_root(exe_path);
     return game_root.parent_path() / "Data" / "SKSE" / "Plugins" / (std::string(Plugin::NAME) + ".ini");
-}
-
-namespace
-{
-
-std::uint32_t parse_hex(char const* a_value, std::uint32_t a_default) noexcept
-{
-    if (!a_value || !*a_value)
-    {
-        return a_default;
-    }
-    char* end = nullptr;
-    auto const value = std::strtoul(a_value, &end, 16);
-    return end == a_value ? a_default : static_cast<std::uint32_t>(value);
-}
 }
 
 void load() noexcept
@@ -58,7 +42,7 @@ void load() noexcept
     g_settings.max_distance = static_cast<float>(ini.GetDoubleValue("General", "MaxDistance", g_settings.max_distance));
     g_settings.scan_interval_ms = static_cast<std::uint32_t>(ini.GetLongValue("General", "ScanIntervalMs", static_cast<long>(g_settings.scan_interval_ms)));
 
-    // ... 在此按插件需求读取其余字段（十六进制颜色可用 parse_hex）...
+    // Read additional project-specific fields here.
 
     g_enabled.store(g_settings.enabled, std::memory_order_relaxed);
 

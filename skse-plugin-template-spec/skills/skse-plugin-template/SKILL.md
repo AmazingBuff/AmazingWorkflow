@@ -1,97 +1,98 @@
 ---
 name: skse-plugin-template
-description: Scaffold and maintain a new Skyrim SKSE plugin (C++ DLL) with multi-runtime SE/AE/VR support via CommonLibSSE, based on the proven structure of the CorpseESP and FollowerSummonAllyFix projects. Run scripts/scaffold.py to generate a new plugin, or follow the conventions to extend an existing one. Complies with the small-project-cpp-rules component bundled in this skill (assets/coding-rules).
+description: Scaffold or maintain a C++23 Skyrim SKSE plugin for SE, AE, and VR with alandtse/CommonLibSSE-NG branch ng, validated metadata, official plugin declarations, reproducible CMake presets, optional config/hotkey/Present/vtable/event modules, GPL-3.0-or-later output, and offline package tests.
 ---
 
-# SKSE Plugin Template (multi-runtime Skyrim)
+# SKSE Plugin Template
 
-本 skill 提供一套经过 CorpseESP 与 FollowerSummonAllyFix 两个真实项目验证的
-**Skyrim SKSE 插件工程模板**，支持同一份 DLL 在 Skyrim **SE / AE / VR** 多运行时上工作
-（CommonLibSSE 多运行时机制），并内建一套可选的常用功能模块（INI 配置、热键、D3D11
-Present 钩子、vtable 钩子、事件监听）。
+This Skill generates one CommonLibSSE-NG plugin project without requiring
+another workflow package. Its bundled coding rules are self-contained under
+`assets/coding-rules/` and integrity-checked by
+`assets/coding-rules/manifest.json`.
 
-它同时遵守本 skill 内置的编码规范组件（随套件分发，位于本 skill 目录的
-`assets/coding-rules/`）：
+## When to use
 
-- 跨语言契约：`small-project-code-contract/SKILL.md`
-- C++/CMake 规范：`small-project-cpp-rules/SKILL.md`
+- Create a new Skyrim SE/AE/VR SKSE DLL project.
+- Add or maintain INI configuration, Present-frame hotkeys, a safe D3D11
+  Present overlay, a vtable hook, or a hit-event sink.
+- Verify that an existing generated project still follows this package's
+  runtime, build, dependency, Git, and license invariants.
 
-（绿地默认值、target-based CMake、显式 sources、4 空格/Allman/east const 等）。冲突时按全局优先级裁决。
+## Scaffold
 
-## 何时使用
-
-- 用户要求"新建/生成一个 Skyrim SKSE 插件（DLL）项目"或"做一个 Skyrim mod（C++ 插件）"。
-- 用户要求按多运行时（SE/AE/VR）方式搭建 SKSE 插件骨架。
-- 需要在既有插件中新增 INI 配置、热键、Present 渲染、vtable 钩子或事件监听模块。
-
-## 快速开始：脚手架
-
-从本 skill 目录运行（或让 Agent 代为运行）：
-
-```text
-python scripts/scaffold.py --name MyPlugin --author "Your Name" --dir E:/SkyrimTools/Proj/MyPlugin
-python scripts/scaffold.py --help            # 查看全部选项
-```
-
-常用参数：
-
-- `--name`：插件/工程名（同时用作 DLL 名、CMake project 名、日志文件名）。
-- `--author`：SKSEPlugin_Version 的作者名。
-- `--description`：README 与 project 描述。
-- `--version`：形如 `1.0.0`。
-- `--runtimes {all|se|ae|vr|se-ae|se-vr|ae-vr}`：默认 `all`（SE+AE+VR 单 DLL）。
-- `--features config,hotkey,present_hook,vtable_hook,event_sink`：按需加入功能模块。
-- `--commonlib {ng|vr}`：默认 `ng`（CommonLibSSE-NG）；`vr` 选 CommonLibVR（ng 分支）。
-- `--dir`：输出目录（默认当前目录下的 `--name`）。
-- `--git-init`：生成后 `git init` 并添加 CommonLibSSE submodule（需网络）。
-
-生成后：
+Run from this Skill directory:
 
 ```powershell
-cd <新项目>
-git submodule update --init --recursive   # 拉取 extern/CommonLibSSE（及其 extern/openvr）
-cmake --preset "msvc release"             # 配置（需 VCPKG_ROOT，首次会装依赖）
-cmake --build --preset "msvc release"     # 产物 "build/msvc release/src/Release/<Name>.dll"
+python scripts/scaffold.py --name My_Plugin --author "Your Name" --dir C:/work/My_Plugin
+python scripts/scaffold.py --help
 ```
 
-> CommonLibSSE 官方仍通过 git submodule 消费（未进官方 vcpkg 源），所以模板默认
-> `.gitmodules` 指向 submodule，与两个源项目一致；不改为 vcpkg 引入。
+The generator validates every input before reporting success. `--name` must be
+a CMake/C++ identifier and is normalized to a lowercase hyphenated vcpkg name.
+`--baseline` is exactly 40 hexadecimal characters. Author values reject unsafe
+CMake/C++ delimiters; descriptions support quotes through context-specific
+escaping but reject multiline/control/template-delimiter input.
 
-## 结构速览（详细见 references/structure.md）
+Supported runtime values are `all`, `se`, `ae`, `vr`, `se-ae`, `se-vr`,
+and `ae-vr`. Supported features are `config`, `present_hook`, `hotkey`,
+`vtable_hook`, and `event_sink`. `hotkey` requires both `config` and
+`present_hook` because the Present callback invokes `Input::poll()`.
 
-```text
-<Project>/
-├── .gitignore / .gitmodules
-├── CMakeLists.txt          # project() + ENABLE_SKYRIM_SE/AE/VR 选项 + add_subdirectory(src) + packaging
-├── CMakePresets.json       # msvc release：VS2022 + vcpkg toolchain + x64-windows-static-md + 14.44 工具集
-├── vcpkg.json              # fmt/spdlog/directxmath/directxtk(+simpleini 按需)
-├── cmake/                  # packaging.cmake / Plugin.h.in / version.rc.in
-├── extern/CommonLibSSE/    # submodule（多运行时引擎库）
-└── src/
-    ├── CMakeLists.txt      # SHARED 目标、PCH、MSVC 旗标、CommonLibSSE add_subdirectory、链接、安装
-    ├── pch.h               # CommonLibSSE + spdlog/fmt + Plugin.h + DLLEXPORT/logger/util
-    ├── main.cpp            # SKSEPlugin_Query/_Version/_Load + 日志 + 消息回调
-    └── <feature>.*         # 可选模块（config/input/esp_renderer/hooks/hit_events）
+Only `alandtse/CommonLibSSE-NG` branch `ng` is supported. `--git-init` is
+local-only. `--add-commonlib-submodule` is separately named and
+network-capable; it runs:
+
+```powershell
+git init
+git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git extern/CommonLibSSE
 ```
 
-## 执行流程
+Default generation runs neither command and creates no `.gitmodules`. After a
+real submodule add, commit both `.gitmodules` and the
+`extern/CommonLibSSE` gitlink.
 
-1. 新建项目：运行 `scripts/scaffold.py`（或按用户指定手工生成），参数缺失时先问清
-   `--name`、`--author`、`--runtimes`、`--features`。
-2. 扩展既有插件：先读 `references/structure.md` 与 `references/patterns.md`，保持既有
-   目录、目标与工具链一致；按需套用对应模式，不整仓重排。
-3. 多运行时功能：阅读 `references/multi-runtime.md`——涉及运行时差异的地址/虚表一律走
-   CommonLibSSE 的 `REL::Relocation` + 地址库（`RE::VTABLE_*[0]`），禁止硬编码单一运行时地址。
-4. 编写/修改 C++ 与 CMake：遵循上列组件 `small-project-cpp-rules/SKILL.md`，并按任务读取其
-   `references/cpp-style.md` 与 `references/cmake-style.md`（绿地默认值）。
-5. 构建与验证：按 `references/build-and-verify.md` 执行最窄构建与清单核对。
+## Execution rules
 
-## 按任务读取内置参考
+1. Read [structure.md](references/structure.md) before changing generated file
+   ownership or lifecycle glue.
+2. Read [multi-runtime.md](references/multi-runtime.md) before changing runtime
+   options, address resolution, or plugin metadata.
+3. Read [patterns.md](references/patterns.md) before changing C++ features,
+   hooks, event sinks, or Present rendering.
+4. Read [build-and-verify.md](references/build-and-verify.md) before changing
+   presets, CommonLib/vcpkg acquisition, dependencies, or verification.
+5. For C++ and CMake changes, follow the bundled
+   [C++ rule index](assets/coding-rules/small-project-cpp-rules/SKILL.md) and
+   [shared code contract](assets/coding-rules/small-project-code-contract/SKILL.md).
+6. Keep `README.md`, this index, generated README/license/resource metadata,
+   all references, tests, integrity manifest, and Changelog synchronized.
 
-- 目录/文件职责、如何增删模块：读取 [structure.md](references/structure.md)。
-- SE/AE/VR 多运行时机制与地址库用法：读取 [multi-runtime.md](references/multi-runtime.md)。
-- 可复用代码模式（入口/日志/消息/INI/热键/渲染/钩子/事件）：读取 [patterns.md](references/patterns.md)。
-- 构建预设、工具链对齐、VR 前置、验证清单：读取 [build-and-verify.md](references/build-and-verify.md)。
+Do not replace `add_commonlibsse_plugin(...)` with hand-written Query/version
+exports. Do not pin an exact MSVC patch toolset or set global warning flags.
+Do not retain swap-chain back buffers or render-target views between Present
+calls, and do not draw on the immediate context without complete state
+isolation.
 
-不得只依据本页摘要动手；涉及上述领域必须读取对应内置参考，并遵守上述
-`small-project-cpp-rules` 组件的工程规则。
+## Build and verify
+
+Generated projects expose matching configure and build presets named
+`msvc release`:
+
+```powershell
+cmake --preset "msvc release"
+cmake --build --preset "msvc release"
+```
+
+Validate this source package offline from its root:
+
+```powershell
+python -B -m unittest discover -s tests -v
+python -B tools/validate_package.py .
+```
+
+These checks do not download CommonLib/vcpkg packages or claim a Skyrim DLL
+build passed. `-B` prevents bytecode artifacts, and validation rejects any
+present `__pycache__` directory or `.pyc` file. Generated output defaults to
+GPL-3.0-or-later. CommonLibSSE-NG's
+own Modding and Linking Exceptions remain upstream terms and are not altered by
+this template.

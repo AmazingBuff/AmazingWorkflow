@@ -68,6 +68,7 @@
 - 功能或修复的实现代码。
 - 直接证明该行为的新增或更新测试。
 - 因公共接口、配置、命令或用户行为变化而需要更新的文档。
+- 当契约的 Documentation Impact 为 `create` 或 `update` 时，准确且可导航的 canonical feature document 与 feature index 更新。
 - 与本次变更直接相关的配置、迁移文件、生成清单或依赖锁文件。
 - 符合第 4 节条件的 Changelog 条目。
 
@@ -89,6 +90,8 @@
 | 数据或配置迁移 | 迁移、兼容代码、验证和回退说明 | 无关结构调整 |
 | 纯文档 | 完整文档改动及有效链接 | 产品代码修改 |
 | 机械格式化 | 仅格式变化 | 逻辑变化、重命名 |
+
+Documentation Impact 为 `create` 或 `update` 时，canonical feature document、feature index、实现、测试、必要 Changelog 与配置属于同一逻辑边界。为 `not-required` 时，契约和结果必须记录稳定的 policy reason；不能因为默认文档尚不存在或计划稍后补写而省略。
 
 ### 3.3 暂存要求
 
@@ -375,7 +378,7 @@ git diff --cached
 检查：
 
 - 逻辑边界是否单一。
-- 测试、文档和 Changelog 是否齐全。
+- 测试、canonical feature document、feature index 和 Changelog 是否按契约齐全且链接有效。
 - 是否存在密钥、调试输出、临时文件或无关格式变化。
 
 ### 6.5 提交并复核
@@ -429,6 +432,7 @@ git show --stat --oneline HEAD
 
 - [ ] 本提交只包含一个逻辑变更。
 - [ ] 相关实现、测试、文档、配置和迁移保持一致。
+- [ ] Documentation Impact、canonical feature document、feature index、导航与 freshness evidence 符合契约。
 - [ ] 相关格式化、静态检查、构建和测试已通过。
 - [ ] 需要 Changelog 的变更已更新 `Unreleased`。
 - [ ] 暂存区不含密钥、调试代码、临时文件和无关修改。

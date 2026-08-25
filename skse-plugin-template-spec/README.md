@@ -1,73 +1,221 @@
-# SKSE Plugin Template Spec
+# SKSE Plugin Template
 
-状态：已确认
-版本：0.1
-日期：2026-08-23
+Status: confirmed
+Version: 0.2
+Date: 2026-08-25
 
-## 1. 定位
+## Purpose
 
-本套件是 **Skyrim SKSE 插件工程模板** 的宿主中立源包，与 `small-project-workflow-spec`、
-`lightweight-coding-agent-workflow-spec` 并列。它不是一个编排型工作流，而是一个
-**单 skill 工具套件**：任何具备「原生 skill 加载 + 文件读写 + 运行 python」能力的
-agent 都可以部署并使用，无需子代理、沙箱或其他宿主特性。
+This host-neutral Skill package generates reproducible C++23 SKSE plugin
+projects for Skyrim SE, AE, and VR. Every generated project uses
+`alandtse/CommonLibSSE-NG` branch `ng`, official CommonLib plugin metadata,
+target-scoped MSVC diagnostics, real configure/build presets, and a
+GPL-3.0-or-later default.
 
-功能概要：以 CorpseESP 与 FollowerSummonAllyFix 两个真实项目验证过的工程结构为蓝本，
-脚手架生成支持 Skyrim SE / AE / VR 多运行时（CommonLibSSE）的 C++ DLL 插件项目，
-可选 INI 配置、热键、D3D11 Present 钩子、vtable 钩子、事件监听模块。
+## Scope and non-goals
 
-## 2. 套件布局
+The package scaffolds one plugin with optional INI configuration, Present-frame
+hotkeys, a D3D11 Present overlay, a Character vtable hook, and a hit-event sink.
+It validates package metadata and generated text before success is reported.
+
+It does not install compilers, vcpkg, CommonLib, SKSE, game assets, or Address
+Library data. It does not build against Skyrim in package tests, manage multiple
+plugins, deploy files, or contact the network unless the caller explicitly uses
+`--add-commonlib-submodule`. A legacy VR-only CommonLib fork is not supported.
+
+## Architecture and data flow
 
 ```text
-skse-plugin-template-spec/
-└── skills/
-    └── skse-plugin-template/
-        ├── SKILL.md                  # 使用入口（触发描述、执行流程、内置参考索引）
-        ├── assets/
-        │   └── coding-rules/         # 编码规范组件（内嵌，随套件分发）
-        │       ├── small-project-code-contract/SKILL.md
-        │       └── small-project-cpp-rules/   # 含 references/ 五份细则与检查脚本
-        ├── references/               # structure / patterns / multi-runtime / build-and-verify
-        ├── scripts/
-        │   └── scaffold.py           # 脚手架生成器（仅标准库）
-        └── templates/                # 生成的工程模板（C++ / CMake / 清单 / 功能模块）
+validated CLI values
+        |
+        v
+scripts/scaffold.py ---- templates/ + selected feature templates
+        |                         |
+        +---- exact placeholder and JSON validation
+                                  |
+                                  v
+                       generated CommonLibSSE-NG project
+
+tools/validate_package.py ---- docs/templates/manifest/generated fixtures
+        |
+        v
+deterministic standard-library test evidence
 ```
 
-## 3. 来源与溯源
+Runtime options are rendered in the generated root `CMakeLists.txt` before
+CommonLib is added. The generated `src/CMakeLists.txt` then calls
+`add_commonlibsse_plugin(...)`, which creates Query/version metadata, and links
+only first-party feature requirements. `main.cpp` contains the Load entry point
+and lifecycle glue.
 
-| 内容 | 来源 | 说明 |
-|---|---|---|
-| 工程模板与脚手架 | CorpseESP / FollowerSummonAllyFix 验证结构 | 经 DSH 部署版迭代（规范对齐 + bug 修复）后收入 |
-| `assets/coding-rules/` | `small-project-workflow-spec` @ git `5fb6ec0` | 经 lightweight-coding-workflow 组合适配（编排词汇调整）；**只取 code-contract 与 cpp-rules 两组件**，python-rules 与本套件无关 |
+## Code map
 
-SPW 上游更新时，重新对照 `assets/coding-rules/` 增量同步；组件头部的溯源块
-标明了基线版本。编码风格的**单一权威来源就是这套内嵌组件**——生成的项目不携带
-`.clang-format` / `.editorconfig` 等本地格式器配置。
+- [Skill index](skills/skse-plugin-template/SKILL.md) — usage and reference
+  routing.
+- [Generator](skills/skse-plugin-template/scripts/scaffold.py) — `main`,
+  boundary validation, rendering, exact file-set checks, and Git setup.
+- [Templates](skills/skse-plugin-template/templates/) — generated CMake, C++,
+  manifest, README, license, resource, and optional feature sources.
+- [Structure reference](skills/skse-plugin-template/references/structure.md) —
+  generated file ownership and data flow.
+- [Pattern reference](skills/skse-plugin-template/references/patterns.md) —
+  warning-clean lifecycle and feature patterns.
+- [Runtime reference](skills/skse-plugin-template/references/multi-runtime.md) —
+  SE/AE/VR options and official metadata behavior.
+- [Build reference](skills/skse-plugin-template/references/build-and-verify.md) —
+  acquisition, presets, limitations, and checks.
+- [Package validator](tools/validate_package.py) — `validate_package`,
+  `validate_manifest`, links, templates, and generated-fixture invariants.
+- [Generator tests](tests/test_scaffold.py) and
+  [validator tests](tests/test_validate_package.py) — standard-library
+  regression suite.
 
-## 4. 部署与适配（各 agent）
+## CLI and generated interfaces
 
-通用原则：把 `skills/skse-plugin-template/` 整目录复制到目标 agent 的 skills 根
-（项目级或用户级均可）。skill 只依赖原生加载器、文件工具和 python3 运行
-scaffold；组件文档按 skill 根的相对路径解析，无任何宿主绝对路径。
+Run from `skills/skse-plugin-template/`:
 
-| Agent | 部署位置 | 备注 |
-|---|---|---|
-| DeepSeek Harness (DSH) | `~/.dsh/skills/skse-plugin-template/` | provider 监视自动生效，免重启 |
-| Codex | 用户级 skill 安装目录 | 纯 skill 调用即可，不需要 `lightweight_implementer` 类自定义 agent |
-| OpenCode | 项目 `.opencode/skill/...` 或全局 skills | 显式 `/skse-plugin-template` 调用 |
-| Pi | 项目 skills 目录（隐藏隐式触发、保留显式调用） | 无内置 subagent 需求 |
-| Claude Code 及其他 | 对应 skills 根（如 `.claude/skills/`） | 同通用原则 |
+```powershell
+python scripts/scaffold.py --name My_Plugin --author "Your Name" --dir C:/work/My_Plugin
+python scripts/scaffold.py --help
+```
 
-适配 checklist：
+Key options:
 
-- [ ] skills 根中出现 `skse-plugin-template/SKILL.md` 且被加载器识别。
-- [ ] `scripts/scaffold.py --help` 可运行（python3，仅标准库）。
-- [ ] 从该 agent 会话内读取 `assets/coding-rules/small-project-cpp-rules/SKILL.md`
-      成功（验证组件路径解析）。
-- [ ] 试生成一个插件目录并核对：文件头日期注入、preset 名 `msvc release`、
-      无 Tab、无未解析占位符。
+- `--name` accepts a CMake/C++ identifier and derives a lowercase hyphenated
+  vcpkg name (for example, `My_Plugin` becomes `my-plugin`).
+- `--version` requires three numeric components, each no greater than 65535.
+- `--baseline` requires exactly 40 hexadecimal characters.
+- `--runtimes` accepts `all`, `se`, `ae`, `vr`, `se-ae`, `se-vr`, or
+  `ae-vr`.
+- `--features` accepts `config`, `present_hook`, `hotkey`, `vtable_hook`,
+  and `event_sink`. `hotkey` requires both `config` and `present_hook` because
+  Present is the frame source that invokes `Input::poll()`.
+- `--commonlib` accepts only `ng`. Other values fail explicitly.
+- `--git-init` runs local-only `git init` and never adds a submodule.
+- `--add-commonlib-submodule` is explicitly network-capable: it initializes Git
+  and runs exactly
+  `git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git extern/CommonLibSSE`.
 
-## 5. 非目标
+Default generation performs no Git or network subprocess. It emits the exact
+manual command above and never fabricates `.gitmodules`. The real submodule
+command creates `.gitmodules` and a gitlink; both must be committed by the
+generated project's owner.
 
-不提供编译工具链本身（VS2022 / vcpkg 由使用者自备，见 build-and-verify.md）；
-不做多插件批量管理；不引入网络依赖（`--git-init` 的 submodule 拉取除外，
-且需用户显式选择）。
+Names, authors, descriptions, versions, baselines, feature lists, paths, and
+`SOURCE_DATE_EPOCH` are validated before rendering. Multiline/control metadata,
+template delimiters, unsafe author quoting, unknown placeholders, and malformed
+spaced placeholders fail without a success report. Quoted descriptions are
+escaped separately for CMake while remaining readable in Markdown.
+
+## Runtime, build, and license invariants
+
+- `ENABLE_SKYRIM_SE`, `ENABLE_SKYRIM_AE`, and `ENABLE_SKYRIM_VR` are
+  authoritative before CommonLib is added, and at least one is selected by
+  every accepted runtime choice.
+- `add_commonlibsse_plugin(...)` owns generated Query/version metadata with
+  Address Library independence. Generated `main.cpp` contains no fixed AE
+  minimum or fixed compatible-runtime list.
+- Configure and build presets are both named `msvc release`, and the build
+  preset references the configure preset. No global compiler-flag cache value
+  or exact Visual C++ patch version is pinned.
+- First-party MSVC warnings are target-scoped at `/W4 /WX`; third-party targets
+  are not modified by the generated project.
+- Present rendering records on a deferred context, executes the command list
+  with immediate-context restoration, recreates helpers when the device changes,
+  and releases per-frame back-buffer/RTV/command-list references before the
+  original Present call.
+- Generated code and resources default to GPL-3.0-or-later. CommonLibSSE-NG is
+  separately GPL-3.0-or-later with its own Modding Exception and GPL-3.0 Linking
+  Exception (with Corresponding Source). The template does not claim, copy, or
+  alter those upstream exception terms.
+
+## Failure modes
+
+The generator returns nonzero with an actionable `error:` message for invalid
+input, nonempty/symlink output directories, missing templates, unresolved
+placeholders, invalid generated JSON, write failures, missing Git, and nonzero
+Git commands. A failed requested Git action never proceeds to the scaffold
+success summary. A failed network submodule add may leave generated files and a
+local repository for inspection, but is still reported as failure.
+
+Generated CMake fails clearly if neither `extern/CommonLibSSE` nor a valid
+`CommonLibSSEPath_NG` source directory exists. Real configure/build can also
+fail when Visual Studio, vcpkg packages, CommonLib nested sources, SKSE headers,
+or Windows SDK components are unavailable; package tests intentionally do not
+claim those external builds passed.
+
+## Dependencies
+
+The source Skill, generator, validator, and tests use Python 3.11+ and only the
+standard library. Generated projects target Windows x64, Visual Studio 2022,
+CMake 3.22+, C++23, vcpkg, SKSE, and CommonLibSSE-NG.
+
+The default vcpkg baseline is
+`ee12231b20c95013c6638d845d04c91559a1d1ff`. Its manifest mirrors
+CommonLibSSE-NG v6.7.0 requirements as of 2026-08-25:
+`vcpkg-cmake-config`, `directxmath`, `directxtk`, `fmt`,
+`nlohmann-json`, `rapidcsv`, `simpleini`, `spdlog`, `toml11`, and
+`xbyak` with the upstream minimum versions. Future CommonLib revisions require
+a coordinated submodule, baseline, dependency, runtime, and license review.
+
+## Tests
+
+Run every offline check from this package root:
+
+```powershell
+python -B -m unittest discover -s tests -v
+python -B tools/validate_package.py .
+```
+
+`-B` prevents Python from writing bytecode caches. The tests already import the
+generator and validator entry points, and package validation rejects every
+present `__pycache__` directory or `.pyc` file.
+
+The suite covers minimal/all-feature scaffolds, every runtime, names and quoted
+descriptions, invalid metadata, feature dependencies, exact placeholder
+exhaustion, JSON/dependency/file sets, preset linkage, modern metadata, licensing,
+warning-clean patterns, Present lifetime/state invariants, and mocked Git
+subprocess success/failure. Manifest fixtures seed missing, extra, duplicate,
+and changed bundled-rule cases. No test invokes a real submodule or needs game
+assets.
+
+When CMake is available, additionally generate a temporary fixture and run
+`cmake --list-presets` plus `cmake --build --list-presets`. When
+`C:/env/vcpkg/vcpkg.exe` exists, run `format-manifest` only on a temporary
+generated manifest.
+
+## Safe modification
+
+Keep validation at the CLI boundary and add new feature files through the
+single `FEATURES` table, canonical feature order, generated file-set assertion,
+tests, and documentation together. Do not add a second CommonLib source or
+hand-write plugin version metadata. Preserve deferred-context state isolation
+if extending the overlay.
+
+Before updating CommonLib, compare its `ng` branch `vcpkg.json`,
+`cmake/CommonLibSSE.cmake`, license files, runtime options, and toolchain
+requirements. Refresh the pinned baseline and tests atomically. Before changing
+bundled coding rules, compare the recorded provenance, update only the intended
+files, and refresh every hash in the integrity manifest.
+
+## Synchronized files
+
+Behavior changes must keep these files current as one logical unit:
+
+- `README.md` and `CHANGELOG.md`.
+- `skills/skse-plugin-template/SKILL.md`.
+- Generated `templates/README.md`, `templates/LICENSE`, CMake/presets,
+  vcpkg/resource metadata, core C++, and selected feature templates.
+- All four files under `skills/skse-plugin-template/references/`.
+- `assets/coding-rules/manifest.json`, `tools/validate_package.py`, and tests.
+
+The package validator resolves Markdown links, verifies named entry points,
+compares templates with generated fixtures, and enforces this synchronized
+surface.
+
+## Release history
+
+Release 0.2 repairs placeholder validation, CommonLib metadata/dependencies,
+Git acquisition, feature wiring, Present state isolation, presets, licensing,
+tests, documentation, and bundled-rule integrity. See
+[CHANGELOG.md](CHANGELOG.md) for the complete release record.

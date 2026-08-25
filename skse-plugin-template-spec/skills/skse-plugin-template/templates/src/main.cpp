@@ -4,6 +4,12 @@
 
 {{FEATURE_INCLUDES}}
 
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+
 namespace
 {
     void initialize_log()
@@ -31,7 +37,7 @@ namespace
         {
         case SKSE::MessagingInterface::kDataLoaded:
             logger::info("Game data loaded"sv);
-            { { ON_DATALOADED } }
+            {{ON_DATALOADED}}
             break;
         case SKSE::MessagingInterface::kNewGame:
             logger::info("New game started"sv);
@@ -45,42 +51,6 @@ namespace
     }
 }
 
-extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(SKSE::QueryInterface const* a_skse, SKSE::PluginInfo* a_info)
-{
-    a_info->infoVersion = SKSE::PluginInfo::kVersion;
-    a_info->name = Plugin::NAME.data();
-    a_info->version = Plugin::VERSION[0];
-
-    if (a_skse->IsEditor())
-    {
-        logger::critical("Loaded in editor, marking as incompatible"sv);
-        return false;
-    }
-
-    REL::Version const runtime = a_skse->RuntimeVersion();
-    if (runtime < SKSE::RUNTIME_SSE_1_6_629)
-    {
-        logger::critical("Unsupported runtime version {}"sv, runtime.string());
-        return false;
-    }
-
-    return true;
-}
-
-extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []
-    {
-        SKSE::PluginVersionData v;
-
-        v.PluginVersion(Plugin::VERSION);
-        v.PluginName(Plugin::NAME);
-        v.AuthorName("{{AUTHOR}}");
-        v.UsesAddressLibrary();
-        v.UsesNoStructs();
-        v.CompatibleVersions({ SKSE::RUNTIME_SSE_LATEST });
-
-        return v;
-    }();
-
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(SKSE::LoadInterface const* a_skse)
 {
     REL::Module::reset();  // Clib-NG bug workaround
@@ -89,11 +59,13 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(SKSE::LoadInterface const* a_s
     logger::info("{} v{}"sv, Plugin::NAME, Plugin::VERSION.string());
 
     SKSE::Init(a_skse);
-    SKSE::AllocTrampoline(1 << 4);
+    if (!SKSE::GetMessagingInterface()->RegisterListener(message_handler))
+    {
+        logger::critical("Failed to register SKSE message listener"sv);
+        return false;
+    }
 
-    SKSE::GetMessagingInterface()->RegisterListener(message_handler);
-
-    { { ON_LOAD } }
+    {{ON_LOAD}}
 
     logger::info("{} loaded"sv, Plugin::NAME);
     return true;

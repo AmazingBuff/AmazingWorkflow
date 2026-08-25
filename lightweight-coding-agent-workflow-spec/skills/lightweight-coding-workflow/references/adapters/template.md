@@ -2,7 +2,7 @@
 host_adapter: "{{HOST_ADAPTER_ID}}"
 host_id: "{{HOST_ID}}"
 display_name: "{{HOST_DISPLAY_NAME}} Host Adapter"
-protocol_version: "0.4"
+protocol_version: "0.5"
 adapter_version: "{{ADAPTER_VERSION}}"
 support_state: "AUTHORING_ONLY"
 supported_surfaces:
@@ -22,9 +22,11 @@ verified_on: null
 
 # Host Adapter Authoring Template
 
+Implementation dispatch eligibility: **no**. This `AUTHORING_ONLY` template is never an implementation adapter.
+
 This file is intentionally `AUTHORING_ONLY`. Its placeholders and checklist help an adapter author apply the [Host Adapter Contract](../adapter-contract.md) to the [Core protocol](../protocol.md). It is not executable support, and copying or filling it does not make a host supported.
 
-Keep `support_state: AUTHORING_ONLY` until every required operation has a concrete host mapping and the full verification checklist has independent evidence. Protocol 0.4 selects `EXPERIMENTAL` adapters only through the user's explicit named acknowledgement recorded in the approved contract.
+Keep `support_state: AUTHORING_ONLY` until every required operation has a concrete host mapping and the full verification checklist has independent evidence. Protocol `0.5` permits implementation writes only after a deliberate release marks the adapter `VERIFIED`; neither `AUTHORING_ONLY` nor `EXPERIMENTAL` artifacts can be selected for writes.
 
 ## Authoring placeholders
 
@@ -41,7 +43,7 @@ Replace the double-braced metadata values in a derived adapter reference. Record
 | Permission inheritance | `inherit_permissions` | `{{SANDBOX_AND_APPROVAL_MAPPING}}` | `{{PERMISSION_FAILURE_SIGNAL}}` |
 | Lifecycle control | `control_lifecycle` | `{{OWNERSHIP_START_CONTINUE_INTERRUPT_STOP_REPLACE_MAPPING}}` | `{{LIFECYCLE_FAILURE_SIGNAL}}` |
 | Progress reporting | `report_progress` | `{{PROGRESS_OBSERVATION_AND_RELAY_MAPPING}}` | `{{PROGRESS_FAILURE_SIGNAL}}` |
-| Result relay | `relay_result` | `{{LOSSLESS_FINAL_RESULT_MAPPING}}` | `{{RESULT_FAILURE_SIGNAL}}` |
+| Result relay | `relay_result` | `{{LOSSLESS_FINAL_RESULT_AND_DOCUMENTATION_EVIDENCE_MAPPING}}` | `{{RESULT_FAILURE_SIGNAL}}` |
 | Version-control management | `manage_version_control` | `{{READ_ONLY_BASELINE_EXACT_STAGE_COMMIT_AND_SEPARATE_PUSH_MAPPING}}` | `{{VERSION_CONTROL_FAILURE_SIGNAL}}` |
 
 For each section below, replace the authoring prompt with preconditions, exact inputs and outputs, the concrete host mechanism, failure classification, and evidence.
@@ -76,7 +78,7 @@ For each section below, replace the authoring prompt with preconditions, exact i
 
 ## `relay_result`
 
-`{{HOW_DONE_BLOCKED_AND_FAILED_MARKDOWN_RESULTS_REACH_THE_PLANNER_WITHOUT_REWRITING_STATUS_OR_EVIDENCE}}`
+`{{HOW_DONE_BLOCKED_AND_FAILED_MARKDOWN_RESULTS_AND_THEIR_DOCUMENTATION_EVIDENCE_REACH_THE_PLANNER_WITHOUT_REWRITING_STATUS_OR_EVIDENCE}}`
 
 ## `manage_version_control`
 
@@ -94,13 +96,13 @@ Document the host's read-only baseline commands, exact-path staging mechanism, s
 - [ ] Sandbox and approval policies are preserved or narrowed, never broadened.
 - [ ] Writer ownership, interruption, continuation, completion, and replacement are exercised.
 - [ ] Progress can be observed without another writer or loss of final state.
-- [ ] `DONE`, `BLOCKED`, and `FAILED` are relayed losslessly and validated.
+- [ ] `DONE`, `BLOCKED`, and `FAILED` are relayed losslessly, including every `DOCUMENTATION` field.
 - [ ] `version_control_system: none` performs no Git operation, and Git baseline inspection does not mutate the repository.
 - [ ] Missing commit or push authority prevents the corresponding operation; implementation approval is not treated as authority.
 - [ ] An isolated Git fixture proves exact-path staging, staged-diff inspection, a compliant bounded commit, clean post-commit state, and no unapproved push.
 - [ ] Separate push authority is checked against the exact remote and refspec without inheriting from commit authority.
-- [ ] Missing capabilities produce `CAPABILITY_UNAVAILABLE` before approval or writes.
+- [ ] Missing capabilities and every non-`VERIFIED` support state produce `CAPABILITY_UNAVAILABLE` before approval or writes.
 - [ ] Every claimed host surface and version has retained evidence.
 - [ ] An independent review approves promotion to `VERIFIED`.
 
-Until every item has evidence and metadata is updated deliberately, this reference remains `AUTHORING_ONLY` and must not be selected for implementation.
+Until every item has evidence and metadata is updated deliberately to a versioned `VERIFIED` release, this reference remains `AUTHORING_ONLY` and must not be selected for implementation.

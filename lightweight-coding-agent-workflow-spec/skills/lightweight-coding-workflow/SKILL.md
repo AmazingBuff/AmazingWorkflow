@@ -5,9 +5,9 @@ description: Orchestrate requested code changes as user-facing planning in the c
 
 # Lightweight Coding Workflow
 
-Protocol version: `0.4`.
+Protocol version: `0.5`.
 
-Keep the current main task as the only user-facing Planner. Delegate approved product-code writes to one implementation worker through exactly one verified host adapter.
+Keep the current main task as the only user-facing Planner. Delegate approved product-code writes to one implementation worker through exactly one `VERIFIED` host adapter.
 
 ## Required resources and adapter gate
 
@@ -15,16 +15,17 @@ Before requesting approval, creating an approved contract, dispatching implement
 
 1. Read [references/protocol.md](references/protocol.md) completely.
 2. Read [references/adapter-contract.md](references/adapter-contract.md) completely.
-3. Determine whether the workspace is Git-backed using read-only inspection. For Git repositories, read [references/git-commit-convention.md](references/git-commit-convention.md) completely before preparing the proposal.
-4. Identify the current host using read-only host signals.
-5. Find the adapter reference under `references/adapters/` whose `host_id` matches that host.
-6. Require exactly one matching adapter with `support_state: VERIFIED` and read it completely; an `EXPERIMENTAL` match is eligible only when the user explicitly approves that named adapter and its state in the implementation approval, which the contract must record.
-7. Validate that its `protocol_version` is compatible, its `adapter_version` is present, and every required capability and operation from the Host Adapter Contract has a concrete mapping.
-8. Use only that adapter's `identify_host`, `bind_planner`, `validate_model`, `dispatch_worker`, `inherit_permissions`, `control_lifecycle`, `report_progress`, `relay_result`, and `manage_version_control` operations.
+3. Read the canonical [Feature Documentation Convention](references/feature-documentation-convention.md) completely before classifying Documentation Impact or preparing the proposal.
+4. Determine whether the workspace is Git-backed using read-only inspection. For Git repositories, read [references/git-commit-convention.md](references/git-commit-convention.md) completely before preparing the proposal.
+5. Identify the current host using read-only host signals.
+6. Find the adapter reference under `references/adapters/` whose `host_id` matches that host.
+7. Require exactly one matching adapter with `support_state: VERIFIED` and read it completely.
+8. Validate that its `protocol_version` is compatible, its `adapter_version` is present, and every required capability and operation from the Host Adapter Contract has a concrete mapping.
+9. Use only that adapter's `identify_host`, `bind_planner`, `validate_model`, `dispatch_worker`, `inherit_permissions`, `control_lifecycle`, `report_progress`, `relay_result`, and `manage_version_control` operations.
 
-Complete this gate before asking the user to approve implementation or performing any product-code write. `AUTHORING_ONLY` and `UNSUPPORTED` adapters are never eligible for implementation; an `EXPERIMENTAL` adapter only through the explicit named approval above. If no adapter matches, more than one verified adapter matches, or any required capability is unavailable, return `CAPABILITY_UNAVAILABLE` with the host, adapter candidates, and missing capability; do not approve a contract, dispatch a worker, or implement in the Planner as a fallback.
+Complete this gate before asking the user to approve implementation or performing any product-code write. `EXPERIMENTAL`, `AUTHORING_ONLY`, and `UNSUPPORTED` adapters are not eligible for implementation. User consent cannot promote an adapter or authorize it to cross the write gate. If no adapter matches, more than one verified adapter matches, or any required capability is unavailable, return `CAPABILITY_UNAVAILABLE` with the host, adapter candidates, and missing capability; do not approve a contract, dispatch a worker, or implement in the Planner as a fallback.
 
-Create contracts from [assets/implementation-contract.md](assets/implementation-contract.md). Do not invent another contract or result schema.
+Create contracts from [assets/implementation-contract.md](assets/implementation-contract.md). Create canonical feature documents from [assets/feature-document.md](assets/feature-document.md) when the approved Documentation Impact is `create`. Do not invent another contract or result schema.
 
 ## Core invariants
 
@@ -38,6 +39,7 @@ Create contracts from [assets/implementation-contract.md](assets/implementation-
 - The approved contract is immutable. A material change requires a new approved revision.
 - Permissions remain bounded by the current host task. An adapter must not broaden authorization.
 - Verification belongs to the implementation worker. The Planner may perform only read-only confirmation after the worker returns.
+- Required feature documentation is implementation material, not a third phase, and cannot substitute for readable code or verified tests.
 
 ## Phase 1: Plan
 
@@ -59,9 +61,11 @@ Present:
 - numbered requirements;
 - implementation approach and expected paths;
 - constraints and protected existing changes;
-- the applicable coding-rule components the worker must load, when bundled components apply;
+- the applicable bundled coding-rule components the worker must load before editing, or `None`;
 - numbered acceptance criteria;
 - real verification commands or explicit manual checks;
+- Documentation Impact as `create`, `update`, or `not-required` with the canonical policy reason;
+- for `create` or `update`, the canonical feature-document path, feature-index path, code and test entry points, required sections, and validation plan; for `not-required`, the specific stable reason and applicable verification entry points;
 - risks and assumptions;
 - the selected verified host adapter and its version;
 - the exact implementation model and optional reasoning effort.
@@ -69,7 +73,7 @@ Present:
 For a Git repository, also present one complete version-control plan:
 
 - the repository root, branch or detached state, baseline revision, current index/staged state, and uncommitted paths to preserve;
-- the single logical commit boundary and exact paths it would contain;
+- the single logical commit boundary and exact paths it would contain, including required feature documentation and index updates;
 - whether a Changelog entry is required and, when required, its file, category, and proposed user-facing entry;
 - the proposed Conventional Commit message;
 - commit authority and push authority as separate decisions, including an exact remote and refspec if push is proposed.
@@ -86,7 +90,7 @@ After approval:
 
 1. Capture the repository root, branch or detached state, revision, index/staged state, uncommitted paths, and changes that must be preserved.
 2. Use the selected adapter's Planner binding to resolve the task-record location.
-3. Create the contract from the bundled asset, confirm its fixed `protocol_version` matches the loaded Core, and populate every placeholder, including `host_adapter`, `adapter_version`, and the complete Version control section.
+3. Create the contract from the bundled asset, confirm its fixed `protocol_version` matches the loaded Core, and populate every placeholder, including `host_adapter`, `adapter_version`, the complete Version control section, the applicable coding-rule paths, and the Documentation section with its decision, paths, entry points, required sections, and validation obligations.
 4. Set `status` to `APPROVED` and preserve the approved contract unchanged.
 
 Creating task records does not authorize product-code edits, changes to repository ignore rules, staging, commits, or pushes.
@@ -115,14 +119,14 @@ Do not dispatch an additional writer, reviewer, tester, or explorer. If dispatch
 
 Use the adapter's result-relay operation and the exact schemas in the Core protocol.
 
-For `DONE`, inspect all acceptance evidence, command results, Changelog disposition, commit status or proposed message, and push status. The Planner may run read-only checks. If an approved item is unmet but repair remains in scope, continue the same worker through the adapter.
+For `DONE`, inspect all acceptance evidence, command results, `DOCUMENTATION` evidence, Changelog disposition, commit status or proposed message, and push status. Confirm that required documents and index entries are current and navigable. The Planner may run read-only checks. If an approved item is unmet but repair remains in scope, continue the same worker through the adapter.
 
-For `BLOCKED`, stop new implementation work, explain the decision to the user, and revise and reapprove the contract when behavior, scope, architecture, dependencies, allowed paths, destructive authority, or acceptance criteria change.
+For `BLOCKED`, stop new implementation work, explain the decision to the user, and revise and reapprove the contract when behavior, scope, architecture, dependencies, allowed paths, destructive authority, acceptance criteria, or Documentation Impact changes.
 
 For `FAILED`, report the evidence and worktree state. The Planner must not take over product-code writes.
 
 ## Completion
 
-The Planner's final report states the outcome, implementation model, host adapter and version, changed files, acceptance and command evidence, version-control system and baseline, Changelog disposition, commit status or proposed message, push status, unverified items, risks, and contract path and revision.
+The Planner's final report states the outcome, implementation model, host adapter and version, changed files, acceptance and command evidence, Documentation Impact and evidence, version-control system and baseline, Changelog disposition, commit status or proposed message, push status, unverified items, risks, and contract path and revision.
 
 Do not stage, commit, push, deploy, publish, delete user work, or perform another external write unless the approved contract explicitly authorizes the exact action. Commit authority never implies push authority.

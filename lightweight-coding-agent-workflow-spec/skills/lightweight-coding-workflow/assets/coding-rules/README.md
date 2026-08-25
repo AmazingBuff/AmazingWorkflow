@@ -5,11 +5,22 @@
 仅把 SPW 生命周期词汇映射到本框架的两阶段编排，**代码规则本身未做任何修改**。
 SPW 原始版本保持不动；组合工作流只消费本目录版本。
 
+本目录是发布时的自包含资产，不在运行时读取、导入或定位另一个 spec。
+
 ## 来源与同步
 
 - 来源基线：`small-project-workflow-spec` @ git `5fb6ec0`（已包含 cpp-style.md
   命名表/auto 规则修订与 SKILL.md 预编译头规则）。
 - SPW 上游更新时需重新对照本目录，并同步维护下方改动清单。
+- [manifest.json](manifest.json) 是本副本的确定性 integrity 记录；每个 bundled
+  rule file 都有 normalized relative path、SHA-256、provenance 与 synchronization note。
+
+## Integrity manifest
+
+- Manifest 自身不作为 rule file，也不做自引用 hash；`manifest_excludes` 明确记录该例外。
+- 除 manifest 外，本目录任何 missing、extra、duplicate 或 changed file 都使 package validator 失败。
+- 有意修改规则或同步上游时，必须在同一逻辑变更中更新对应 hash、provenance/synchronization metadata、本文改动清单与相关验证。
+- Manifest 只验证发布包内容，不触发下载、自动同步或运行时依赖。
 
 ## 组件清单
 

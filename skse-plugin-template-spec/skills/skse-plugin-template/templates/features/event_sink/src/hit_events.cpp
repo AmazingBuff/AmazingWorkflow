@@ -10,7 +10,10 @@ namespace
 class HitSink final : public RE::BSTEventSink<RE::TESHitEvent>
 {
 public:
-    RE::BSEventNotifyControl ProcessEvent(RE::TESHitEvent const* a_event, RE::BSTEventSource<RE::TESHitEvent>* a_source) override
+    RE::BSEventNotifyControl ProcessEvent(
+        RE::TESHitEvent const*,
+        RE::BSTEventSource<RE::TESHitEvent>*
+    ) override
     {
         // ... 在此实现受击兜底逻辑（事件在主线程执行）...
         return RE::BSEventNotifyControl::kContinue;

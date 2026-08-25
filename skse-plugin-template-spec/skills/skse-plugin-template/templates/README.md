@@ -2,39 +2,64 @@
 
 {{DESCRIPTION}}
 
-多运行时（Skyrim SE / AE / VR）的 SKSE 插件，基于 CommonLibSSE。
+This is version {{PROJECT_VERSION}} of a C++23 SKSE plugin generated for runtime
+selection `{{RUNTIME_SELECTION}}` with features `{{FEATURE_SELECTION}}` and
+CommonLibSSE-NG branch `ng`.
 
-## 安装
+## Requirements
 
-1. 安装 [SKSE64](https://skse.silverlock.org/)（或 SKSEVR，与游戏版本匹配）。
-2. 安装 [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)（VR 用 VR 版）。
-3. 将 `{{PROJECT_NAME}}.dll` 放入游戏目录的 `Data\SKSE\Plugins\` 下。
+- Windows x64 and Visual Studio 2022 with Desktop development with C++.
+- CMake 3.22 or newer.
+- Git and vcpkg with `VCPKG_ROOT` set.
+- The matching SKSE runtime and Address Library installation for SE, AE, or VR.
 
-> 日志：`Documents\My Games\Skyrim Special Edition\SKSE\{{PROJECT_NAME}}.log`
+## Add CommonLibSSE-NG
 
-## 构建
-
-需要：Visual Studio 2022（含 C++ 桌面开发）、CMake 3.22+、git、vcpkg（设置 `VCPKG_ROOT`）。
+The scaffold does not invent `.gitmodules` and performs no network operation by
+default. From this project directory, initialize the real submodule explicitly:
 
 ```powershell
-# 首次克隆拉取 CommonLibSSE 子模块
+git init
+git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git extern/CommonLibSSE
 git submodule update --init --recursive
+```
 
-cmake --preset "msvc release"           # 配置（首次会经 vcpkg 安装依赖）
-cmake --build --preset "msvc release"   # 产物 "build/msvc release/src/Release/{{PROJECT_NAME}}.dll"
+Commit both the generated `.gitmodules` file and the
+`extern/CommonLibSSE` gitlink. A local checkout may instead be supplied through
+the `CommonLibSSEPath_NG` CMake cache variable or environment variable.
 
-# 打 ZIP 包（可选）
+## Build
+
+```powershell
+cmake --preset "msvc release"
+cmake --build --preset "msvc release"
 cpack --config "build/msvc release/CPackConfig.cmake"
 ```
 
-- VR 构建前置：CommonLibSSE 的 `extern/openvr` 子模块需就绪，见
-  `git submodule update --init --recursive`（会带入嵌套子模块）。
-- 拷贝到游戏目录：设置 `CompiledPluginsPath` 环境变量后 `-DCOPY_OUTPUT=ON`。
+The configure and build presets share the name `msvc release`; the build preset
+links to the configure preset and selects Release. The DLL is produced below
+`build/msvc release/src/Release/`. Set `CompiledPluginsPath` and configure with
+`-DCOPY_OUTPUT=ON` only when an explicit local deployment copy is wanted.
 
-## 配置
+CommonLibSSE-NG and vcpkg may acquire their own build dependencies during a real
+configure. This repository pins the vcpkg baseline that matched CommonLibSSE-NG
+v6.7.0 on 2026-08-25. Updating CommonLib requires a coordinated review of its
+`vcpkg.json`, this project's baseline, dependency versions, runtime options, and
+license obligations.
 
-（按需填写：INI 路径 `Data\SKSE\Plugins\{{PROJECT_NAME}}.ini`、热键等。）
+## Installation
 
-## 许可证
+Copy `{{PROJECT_NAME}}.dll` to `Data\SKSE\Plugins\`. The plugin log is written
+under the active Skyrim documents directory as `SKSE\{{PROJECT_NAME}}.log`.
 
-MIT
+## License
+
+Copyright is retained by {{AUTHOR}}. This generated project defaults to
+GPL-3.0-or-later; see [LICENSE](LICENSE).
+
+CommonLibSSE-NG is a separate dependency distributed under
+GPL-3.0-or-later with its own Modding Exception and GPL-3.0 Linking Exception
+(with Corresponding Source). Those upstream exceptions are not relicensed,
+copied, or altered by this project. A plugin statically linked with
+CommonLibSSE-NG must remain GPL-3.0-or-later or otherwise GPL-compatible and
+must satisfy the upstream corresponding-source terms.
