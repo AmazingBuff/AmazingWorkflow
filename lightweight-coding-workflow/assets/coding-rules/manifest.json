@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "protocol_version": "0.5",
+  "hash_algorithm": "sha256",
+  "bundle_root": "assets/coding-rules",
+  "manifest_excludes": [
+    "manifest.json"
+  ],
+  "source_spec": "small-project-workflow-spec (provenance only; not a runtime dependency)",
+  "source_baseline": "git 5fb6ec0",
+  "synchronization_policy": "Manually review an approved upstream snapshot, preserve this package's two-phase vocabulary, and update affected file hashes plus provenance notes atomically; never fetch another spec at runtime.",
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "6ca3dd4ca93c085ef6e1155d615b8086feb8b7671eff25728943c1664660f996",
+      "provenance": "Authored in this package to describe the composite adaptation of the small-project workflow rules at git 5fb6ec0.",
+      "synchronization": "Keep the component inventory, adaptation notes, manifest policy, and affected hashes synchronized in one reviewed change."
+    },
+    {
+      "path": "small-project-code-contract/SKILL.md",
+      "sha256": "b6b7703a63ae62496aa16acb86481438248eb7fa03aa44e19bf0d70500a21d14",
+      "provenance": "Adapted from small-project-workflow-spec at git 5fb6ec0; lifecycle terms were mapped to the approved implementation contract.",
+      "synchronization": "Review upstream rule changes manually, preserve two-phase contract terminology, and update this hash with the adaptation notes."
+    },
+    {
+      "path": "small-project-cpp-rules/SKILL.md",
+      "sha256": "15829a6b23480b3f15c8a453df027def660c2d98c37e3310eae67070c3c26975",
+      "provenance": "Adapted from small-project-workflow-spec at git 5fb6ec0; workflow gates and loader language were mapped to this package.",
+      "synchronization": "Review upstream rule changes manually, preserve contract-owned acceptance semantics, and update this hash with the adaptation notes."
+    },
+    {
+      "path": "small-project-cpp-rules/references/cmake-style.md",
+      "sha256": "96d8add1e0548befcb396fbea4a98e314fe83ab93773ef728125e2f8059cfc33",
+      "provenance": "Copied unchanged from small-project-workflow-spec at git 5fb6ec0.",
+      "synchronization": "If an approved upstream version changes, compare it manually, copy only intended rule changes, and update this hash."
+    },
+    {
+      "path": "small-project-cpp-rules/references/cpp-style.md",
+      "sha256": "a17bb20f388ad95a0c64d0dc8c1a47b74b02eef01f9a3608e59441de9a7e807b",
+      "provenance": "Copied unchanged from small-project-workflow-spec at git 5fb6ec0.",
+      "synchronization": "If an approved upstream version changes, compare it manually, copy only intended rule changes, and update this hash."
+    },
+    {
+      "path": "small-project-cpp-rules/references/decision-policy.md",
+      "sha256": "91b0fbe21072f5df299a895573457d02895b4ba11b85570894748f74dfb8527d",
+      "provenance": "Copied unchanged from small-project-workflow-spec at git 5fb6ec0.",
+      "synchronization": "If an approved upstream version changes, compare it manually, copy only intended rule changes, and update this hash."
+    },
+    {
+      "path": "small-project-cpp-rules/references/project-architecture.md",
+      "sha256": "77eeab6820aea7be6fe0454e217a56ac8675ee545b94d3076ce0418965880aa5",
+      "provenance": "Copied unchanged from small-project-workflow-spec at git 5fb6ec0.",
+      "synchronization": "If an approved upstream version changes, compare it manually, copy only intended rule changes, and update this hash."
+    },
+    {
+      "path": "small-project-cpp-rules/references/testing-and-validation.md",
+      "sha256": "097480832ff3083cca8b980005166cf71efa62f2a237de46e0aa6e4153871553",
+      "provenance": "Adapted from small-project-workflow-spec at git 5fb6ec0 so checks serve the implementation contract rather than external workflow gates.",
+      "synchronization": "Review upstream test guidance manually, retain contract-owned acceptance language, and update this hash with the adaptation notes."
+    },
+    {
+      "path": "small-project-cpp-rules/scripts/inspect_project.py",
+      "sha256": "57aee8c80e31d4f5f1ccdee557c04d5d1d98f75f04dc4e6ccc24a4781eb8b072",
+      "provenance": "Copied unchanged from small-project-workflow-spec at git 5fb6ec0 as a standard-library inspection helper.",
+      "synchronization": "If an approved upstream version changes, compare behavior and output manually, copy only intended changes, and update this hash."
+    },
+    {
+      "path": "small-project-python-rules/SKILL.md",
+      "sha256": "0bc8cb9e5e84c860cd865e1e58e24d27f79a4f6a78ee8ecfcefb7b1f2fa00aaf",
+      "provenance": "Adapted from small-project-workflow-spec at git 5fb6ec0; loader and built-in-workflow language were mapped to this package.",
+      "synchronization": "Review upstream rule changes manually, preserve self-contained package terminology, and update this hash with the adaptation notes."
+    }
+  ]
+}

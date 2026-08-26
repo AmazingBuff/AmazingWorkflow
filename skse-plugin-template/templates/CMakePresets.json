@@ -1,0 +1,55 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "msvc",
+            "hidden": true,
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "installDir": "${sourceDir}/install/${presetName}",
+            "architecture": {
+                "value": "x64",
+                "strategy": "set"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+            }
+        },
+        {
+            "name": "msvc debug",
+            "displayName": "MSVC Debug",
+            "inherits": "msvc"
+        },
+        {
+            "name": "msvc release",
+            "displayName": "MSVC Release",
+            "inherits": "msvc"
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "msvc debug",
+            "displayName": "MSVC Debug",
+            "configurePreset": "msvc debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "msvc release",
+            "displayName": "MSVC Release",
+            "configurePreset": "msvc release",
+            "configuration": "Release"
+        }
+    ]
+}

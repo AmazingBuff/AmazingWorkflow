@@ -1,0 +1,26 @@
+//
+// Created by AmazingBuff on {{DATE}}.
+//
+
+#pragma once
+
+#include <REL/Version.h>
+
+#include <string_view>
+
+namespace {{PROJECT_NAMESPACE}}
+{
+namespace plugin
+{
+
+inline constexpr REL::Version Version
+{
+    @PROJECT_VERSION_MAJOR@u,
+    @PROJECT_VERSION_MINOR@u,
+    @PROJECT_VERSION_PATCH@u,
+};
+
+inline constexpr std::string_view Name{ "@PROJECT_NAME@" };
+
+} // namespace plugin
+} // namespace {{PROJECT_NAMESPACE}}
