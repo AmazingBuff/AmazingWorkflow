@@ -1,18 +1,18 @@
 # Two-Phase Coding Core Protocol
 
-Protocol version: `0.5`.
+Protocol version: `0.6`.
 
-This document defines the host-neutral contract, state, worktree, single-writer, documentation, and result rules. Host detection and execution mappings belong to the [Host Adapter Contract](adapter-contract.md) and the selected adapter reference.
+This document defines the host-neutral contract, state, worktree, single-writer, documentation, and result rules. Host detection and execution mappings belong to the [Host Adapter Contract](adapter-contract.md) and the selected adapter reference. Phase 1 discovery routing belongs to the [Context Routing reference](context-routing.md).
 
 ## Core invariants
 
 - One user-facing Planner owns requirements, approval, and final reporting.
 - One implementation worker owns product-code writes to a worktree.
-- The workflow has exactly two phases: planning and implementation.
+- The workflow has exactly two phases: planning and implementation. Read-only scouting is a Phase 1 activity, not a third phase or a second writer.
 - No product-code write occurs before contract and implementation-model approval.
-- Only a compatible adapter with `support_state: VERIFIED` may dispatch product-code writes.
+- Only a compatible adapter with `support_state: VERIFIED` may dispatch product-code writes. Scout dispatch is a separate, optional adapter capability and never authorizes writes.
 - An approved contract is the sole implementation authority and is never edited in place.
-- Model selection is explicit and is never silently substituted.
+- Model selection is explicit for every dispatched role (scouts and worker) and is never silently substituted.
 - Permissions may be inherited or narrowed, never broadened by this workflow.
 - Version-control mutations require exact, separately recorded authority; contract or implementation approval alone grants none.
 - Required feature documentation is implementation material in the same logical change, not another phase.
@@ -38,6 +38,7 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - Existing user changes that must be preserved are identified in the baseline or constraints.
 - Verification commands are real project commands, or the contract states why a check is manual.
 - `implementation_model` is the exact user-approved value. Parent inheritance is recorded only as `inherit-parent (user-approved)`.
+- The Discovery section records the routing decision (`direct` or `orchestrated`), its basis, the scout model when the orchestrated lane ran, estimated and measured discovery token spend, and the evidence-locator index used by requirements and acceptance criteria. Requirements and acceptance criteria should reference surviving locators (`path:symbol`, `path:lines a-b`) so the worker starts from precise coordinates.
 - Applicable bundled coding-rule component documents are recorded one host-resolvable absolute path per entry, or the section records `None`; the worker loads every listed document before its first edit.
 - The Version control section records `git` or `none`. A Git-backed task also records the read-only baseline, one logical commit boundary, Changelog decision and proposed entry, proposed Conventional Commit message, commit authority, and separate push authority.
 - The Documentation section records Documentation Impact as `create`, `update`, or `not-required` with a canonical policy reason. For required maintenance it also records the canonical feature-document path, feature-index path, code and test entry points, required sections, and validation obligations; non-required fields use explicit safe not-applicable values.
@@ -60,7 +61,8 @@ Create a new revision when any of these changes:
 - version-control system, logical commit boundary, Changelog disposition, proposed commit message, commit authority, or push authority;
 - Documentation Impact, policy reason, canonical document or index path, code or test entry points, required sections, or validation obligations;
 - implementation model, reasoning effort, host adapter, or adapter version;
-- the applicable coding-rules set.
+- the applicable coding-rules set;
+- the Discovery section's routing decision, basis, or scout model.
 
 Do not overwrite an approved contract. Mark an old revision `SUPERSEDED` only after its replacement is approved, and link the revisions through `supersedes`.
 
@@ -70,10 +72,10 @@ A clarification that changes none of the items above may be relayed to the same 
 
 The Core exposes only these phases:
 
-1. `PLANNING`: discover, clarify, validate capabilities, prepare a contract, and obtain approval.
+1. `PLANNING`: discover (directly or through read-only scouts per the [Context Routing reference](context-routing.md)), clarify, validate capabilities, prepare a contract, and obtain approval.
 2. `IMPLEMENTING`: dispatch one worker, execute within the contract, verify, and return one result.
 
-Internal host states do not create a third phase or another decision-making role.
+Internal host states do not create a third phase or another decision-making role. Scout subagents are read-only discovery helpers inside `PLANNING`; they are not a phase, a writer, or a planner.
 
 ## Dispatch envelope
 
@@ -274,16 +276,17 @@ For `DONE`, the Planner reports:
 1. outcome;
 2. implementation model;
 3. selected host adapter and version;
-4. changed files;
-5. acceptance evidence;
-6. commands and test results;
-7. Documentation Impact, canonical document and index paths, navigation and validation evidence, and freshness status;
-8. version-control system and baseline, Changelog disposition, commit status or proposed message, and push status;
-9. unverified items and risks;
-10. contract location and revision.
+4. routing decision, scout model, and measured discovery token spend when the orchestrated lane ran;
+5. changed files;
+6. acceptance evidence;
+7. commands and test results;
+8. Documentation Impact, canonical document and index paths, navigation and validation evidence, and freshness status;
+9. version-control system and baseline, Changelog disposition, commit status or proposed message, and push status;
+10. unverified items and risks;
+11. contract location and revision.
 
 The Planner may inspect the diff and rerun read-only checks, but may not edit product code.
 
-## Protocol 0.5 compatibility
+## Protocol 0.6 compatibility
 
-Protocol `0.5` reconciles the coding-rule and feature-documentation additions into one release and closes implementation dispatch to every non-`VERIFIED` support state. Approved contracts remain immutable: continue an older contract only with its matching historical Core and adapter resources, or create and approve a new `0.5` revision. Do not pair a `0.5` Core with older adapter metadata through an implicit compatibility range.
+Protocol `0.6` adds Context Routing to `0.5`: a routing decision and optional read-only scout dispatch in Phase 1, the Discovery contract section, and the optional `read_only_scout_dispatch` adapter capability. The nine `0.5` capabilities are unchanged; adapters updated for `0.6` keep their `0.5` mappings and add the optional capability. Approved `0.5` contracts remain immutable: continue them with their matching historical Core and adapter resources, or create and approve a new `0.6` revision. Do not pair a `0.6` Core with `0.5` adapter metadata through an implicit compatibility range; an `0.5` adapter without the optional capability simply restricts the Planner to the fast lane.

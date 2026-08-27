@@ -47,6 +47,11 @@ The plan's `budget` object uses these fields:
 
 Treat budget violations as validation errors. Treat unknown estimates as uncertainty that must be surfaced rather than silently ignored.
 
+Two budget semantics are worth stating precisely:
+
+- `max_input_tokens_per_task` constrains the **initial dispatch estimate** only. A task's `allowed_expansion.max_additional_tokens` is not part of that estimate; the validator emits a warning when initial estimate plus expansion allowance exceeds the per-task cap (the worst-case bound).
+- `max_total_dispatched_tokens` likewise excludes expansion allowances. When comparing planned cost against a hard spending ceiling, add expansion allowances explicitly.
+
 ## 4. Source-selection policy
 
 Use a stable source ID and an opaque URI. The URI may be a path, object key, document ID, database record, API resource, or connector reference.
@@ -170,7 +175,7 @@ raw_overlap_ratio = raw_duplicate / total_dispatched_source_tokens
 
 Accidental duplicate tokens exclude occurrences marked `intentional_overlap` and exclude sources explicitly placed in shared context. The validator applies `max_accidental_overlap_ratio` to this metric.
 
-When no tokenizer is available, the bundled validator estimates prompt tokens from text length using a conservative character-based approximation. Treat it as planning guidance, not billing truth.
+When no tokenizer is available, the bundled validator estimates prompt tokens from text length: CJK characters (Han, kana, hangul) count near one token each and remaining text near four characters per token. The estimate is deliberately conservative for CJK because flat character division underestimates CJK content by roughly four times. Treat it as planning guidance, not billing truth.
 
 ## 10. Recommended tuning
 

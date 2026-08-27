@@ -2,7 +2,7 @@
 
 Status: canonical
 
-Policy version: `0.5`
+Policy version: `0.6`
 
 Feature documentation is maintained implementation material. It helps a human or future agent find a cohesive feature, understand its boundaries and invariants, verify it, and change it safely without turning the document into a line-by-line retelling of the code.
 

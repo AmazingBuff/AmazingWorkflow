@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "protocol_version": "0.5",
+  "protocol_version": "0.6",
   "hash_algorithm": "sha256",
   "bundle_root": "assets/coding-rules",
   "manifest_excludes": [
@@ -12,7 +12,7 @@
   "files": [
     {
       "path": "README.md",
-      "sha256": "6ca3dd4ca93c085ef6e1155d615b8086feb8b7671eff25728943c1664660f996",
+      "sha256": "bf8b22ce465308d351052954995c9fbdccc20e1cb70f5fa61c57350d484eebf5",
       "provenance": "Authored in this package to describe the composite adaptation of the small-project workflow rules at git 5fb6ec0.",
       "synchronization": "Keep the component inventory, adaptation notes, manifest policy, and affected hashes synchronized in one reviewed change."
     },

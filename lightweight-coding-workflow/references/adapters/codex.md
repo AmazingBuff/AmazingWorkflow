@@ -2,8 +2,8 @@
 host_adapter: "codex"
 host_id: "codex"
 display_name: "Codex Host Adapter"
-protocol_version: "0.5"
-adapter_version: "0.5"
+protocol_version: "0.6"
+adapter_version: "0.6"
 support_state: "VERIFIED"
 supported_surfaces:
   - "desktop"
@@ -19,31 +19,35 @@ capabilities:
   - "progress_reporting"
   - "result_relay"
   - "version_control_management"
+optional_capabilities:
+  - "read_only_scout_dispatch"
 verified_on: "2026-08-25"
 ---
 
 # Codex Host Adapter
 
-Implementation dispatch eligibility: **yes**, only after contract/model approval and immediate capability revalidation.
+Implementation dispatch eligibility: **yes**, only after contract/model approval and immediate capability revalidation. Scout dispatch eligibility: **yes**, for read-only Phase 1 discovery per the [Context Routing reference](../context-routing.md).
 
-This adapter is the sole `VERIFIED` protocol `0.5` mapping. It implements the [Host Adapter Contract](../adapter-contract.md) for the [Core protocol](../protocol.md), carries feature-documentation evidence without adding a capability, and preserves the model-neutral custom Agent.
+This adapter is the sole `VERIFIED` protocol `0.6` mapping. It implements the [Host Adapter Contract](../adapter-contract.md) for the [Core protocol](../protocol.md), carries feature-documentation evidence without adding a capability, and preserves the model-neutral custom Agent.
 
 ## Compatibility
 
 | Item | Mapping |
 | --- | --- |
-| Core protocol | Exact version `0.5` |
-| Adapter | `codex` version `0.5` |
+| Core protocol | Exact version `0.6` |
+| Adapter | `codex` version `0.6` |
 | Planner | Current Codex main task and its selected model |
 | Worker | Codex custom agent `lightweight_implementer` |
 | Worker source | [lightweight_implementer.toml](../../agents/lightweight_implementer.toml) |
+| Scout | Codex custom agent `lightweight_scout` with a validated cheap model, per the [Context Routing reference](../context-routing.md) |
+| Scout source | [lightweight_scout.toml](../../agents/lightweight_scout.toml) |
 | Contract asset | Loaded Skill's `assets/implementation-contract.md` |
 | Feature documentation | Loaded convention and template plus contract-selected repository paths |
 | Coding-rule components | Loaded Skill's `assets/coding-rules/**`, listed by absolute path in the contract |
 | Task records | Repository-local `.codex/task-runs/<task-id>/implementation-contract-v<revision>.md` |
-| Result schemas | Core `DONE`, `BLOCKED`, and `FAILED` Markdown schemas with `DOCUMENTATION` evidence |
+| Result schemas | Core `DONE`, `BLOCKED`, and `FAILED` Markdown schemas with `DOCUMENTATION` evidence; scouts return evidence packets per the Context Routing reference |
 
-Protocol `0.5` requires exact adapter metadata. Older approved contracts remain immutable and continue only with matching historical resources or a newly approved revision.
+Protocol `0.6` requires exact adapter metadata. Older approved contracts remain immutable and continue only with matching historical resources or a newly approved revision.
 
 ## Operation map
 
@@ -58,6 +62,7 @@ Protocol `0.5` requires exact adapter metadata. Older approved contracts remain 
 | Progress reporting | `report_progress` | Observe the subagent task and relay concise progress while raw logs remain with the worker. | `FAILED` only when progress/result state cannot be recovered after evidence-based attempts. |
 | Result relay | `relay_result` | Receive the worker's final Markdown and validate its status plus every required Core section, including `DOCUMENTATION`. | Continue the same worker for an in-scope malformed result; otherwise `FAILED`. |
 | Version-control management | `manage_version_control` | Use read-only Git commands for baselines; use exact-path staging and commit only under exact contract authority; push only under separate remote/refspec authority. | `BLOCKED` for authority, overlap, or baseline conflicts; `FAILED` for an unrecoverable authorized Git operation. |
+| Read-only scout dispatch (optional) | `dispatch_scout` | Spawn the `lightweight_scout` custom agent with a validated cheap model, the scout task packet, and exactly its assigned source selectors; relay evidence packets; no write path. | `CAPABILITY_UNAVAILABLE` before scouting if custom agents or model overrides are unavailable; the task falls back to the fast lane with the restriction recorded. |
 
 ## `identify_host`
 
@@ -94,7 +99,7 @@ If Codex cannot expose or accept the selected model or effort, return to plannin
 
 Preconditions:
 
-- the contract is `APPROVED` and records `protocol_version: "0.5"`, `host_adapter: "codex"`, and `adapter_version: "0.5"`;
+- the contract is `APPROVED` and records `protocol_version: "0.6"`, `host_adapter: "codex"`, and `adapter_version: "0.6"`;
 - no other write-capable subagent owns the worktree;
 - model and permission validation passed;
 - every applicable coding-rule path and Documentation obligation resolves;
@@ -173,6 +178,19 @@ Push is separate. Run `git push <approved-remote> <approved-source>:<approved-de
 
 Return the Core version-control evidence fields without rewriting status. A denied authority, ownership conflict, or contract mismatch is `BLOCKED`; an evidence-backed failure of an authorized operation that cannot progress under the same environment is `FAILED`.
 
+## `dispatch_scout` (optional capability)
+
+Preconditions:
+
+- the routing decision chose the orchestrated lane and was presented to the user with the scout model;
+- the scout model passed `validate_model` with the same validation order as the implementation model;
+- a validated orchestration plan and scout task packets exist under the task-record directory;
+- the `lightweight_scout` custom agent is available.
+
+Spawn `lightweight_scout` once per task packet with an explicit model override for the validated cheap model. Pass the task packet, the exact assigned source selectors, and the evidence-packet response contract from the Context Routing reference. Scouts never receive the parent transcript, never self-expand beyond `request`-mode expansion requests, and never receive a write path; permission inheritance keeps them inside the main task's read-only discipline.
+
+Relay evidence packets back to the Planner, which merges them per the Context Routing reference. A scout failure is a routing fallback: switch the affected discovery to the fast lane and record the restriction in the proposal, or return to the routing decision. Scout dispatch never satisfies or substitutes any part of `dispatch_worker`.
+
 ## Verification basis
 
-This `VERIFIED` mapping preserves main-task planning, explicit per-task implementation-model choice, the model-neutral `lightweight_implementer`, inherited permissions, one subagent writer, documentation-aware result relay, and the user-level Skill plus Agent installation layout. Protocol `0.5` validation checks adapter metadata, all nine operation mappings, the write gate, bundled-rule integrity, feature-documentation integration, and source/install parity. The 2026-08-25 release revalidated current inherited-model resolution and retained the prior isolated Git and lifecycle evidence for unchanged operations.
+This `VERIFIED` mapping preserves main-task planning, explicit per-task implementation-model choice, the model-neutral `lightweight_implementer`, inherited permissions, one subagent writer, documentation-aware result relay, and the user-level Skill plus Agent installation layout. Protocol `0.6` validation checks adapter metadata, all nine operation mappings, the optional scout-dispatch mapping, the write gate, bundled-rule integrity, feature-documentation integration, and source/install parity. The 2026-08-25 release revalidated current inherited-model resolution and retained the prior isolated Git and lifecycle evidence for unchanged operations.

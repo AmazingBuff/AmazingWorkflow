@@ -5,9 +5,9 @@ description: Orchestrate requested code changes as user-facing planning in the c
 
 # Lightweight Coding Workflow
 
-Protocol version: `0.5`.
+Protocol version: `0.6`.
 
-Keep the current main task as the only user-facing Planner. Delegate approved product-code writes to one implementation worker through exactly one `VERIFIED` host adapter.
+Keep the current main task as the only user-facing Planner. Delegate approved product-code writes to one implementation worker using a user-approved model and a verified host adapter. Route Phase 1 repository discovery through the Context Routing reference: direct inspection for small tasks, read-only scout subagents on a cheap model for large or multi-boundary tasks.
 
 ## Required resources and adapter gate
 
@@ -15,13 +15,14 @@ Before requesting approval, creating an approved contract, dispatching implement
 
 1. Read [references/protocol.md](references/protocol.md) completely.
 2. Read [references/adapter-contract.md](references/adapter-contract.md) completely.
-3. Read the canonical [Feature Documentation Convention](references/feature-documentation-convention.md) completely before classifying Documentation Impact or preparing the proposal.
-4. Determine whether the workspace is Git-backed using read-only inspection. For Git repositories, read [references/git-commit-convention.md](references/git-commit-convention.md) completely before preparing the proposal.
-5. Identify the current host using read-only host signals.
-6. Find the adapter reference under `references/adapters/` whose `host_id` matches that host.
-7. Require exactly one matching adapter with `support_state: VERIFIED` and read it completely.
-8. Validate that its `protocol_version` is compatible, its `adapter_version` is present, and every required capability and operation from the Host Adapter Contract has a concrete mapping.
-9. Use only that adapter's `identify_host`, `bind_planner`, `validate_model`, `dispatch_worker`, `inherit_permissions`, `control_lifecycle`, `report_progress`, `relay_result`, and `manage_version_control` operations.
+3. Read [references/context-routing.md](references/context-routing.md) and [references/orchestration-contracts.md](references/orchestration-contracts.md) completely before inspecting the repository or preparing the proposal.
+4. Read the canonical [Feature Documentation Convention](references/feature-documentation-convention.md) completely before classifying Documentation Impact or preparing the proposal.
+5. Determine whether the workspace is Git-backed using read-only inspection. For Git repositories, read [references/git-commit-convention.md](references/git-commit-convention.md) completely before preparing the proposal.
+6. Identify the current host using read-only host signals.
+7. Find the adapter reference under `references/adapters/` whose `host_id` matches that host.
+8. Require exactly one matching adapter with `support_state: VERIFIED` and read it completely.
+9. Validate that its `protocol_version` is compatible, its `adapter_version` is present, and every required capability and operation from the Host Adapter Contract has a concrete mapping.
+10. Use only that adapter's `identify_host`, `bind_planner`, `validate_model`, `dispatch_worker`, `inherit_permissions`, `control_lifecycle`, `report_progress`, `relay_result`, and `manage_version_control` operations, plus its optional `read_only_scout_dispatch` capability when scouting is routed through subagents.
 
 Complete this gate before asking the user to approve implementation or performing any product-code write. `EXPERIMENTAL`, `AUTHORING_ONLY`, and `UNSUPPORTED` adapters are not eligible for implementation. User consent cannot promote an adapter or authorize it to cross the write gate. If no adapter matches, more than one verified adapter matches, or any required capability is unavailable, return `CAPABILITY_UNAVAILABLE` with the host, adapter candidates, and missing capability; do not approve a contract, dispatch a worker, or implement in the Planner as a fallback.
 
@@ -31,11 +32,12 @@ Create contracts from [assets/implementation-contract.md](assets/implementation-
 
 - The current main-task model is the Planner. Never replace it with a planning worker or override it.
 - Only the Planner communicates with the user.
-- The workflow has exactly two phases: planning and implementation.
+- The workflow has exactly two phases: planning and implementation. Scouting is a read-only Phase 1 activity, not a third phase.
+- Scout subagents return evidence packets with locators; they never write product code, change requirements, or make routing or contract decisions.
 - Only one implementation worker may own writes to a worktree at a time.
 - The Planner does not modify product code; the implementation worker does not change approved requirements, architecture, dependencies, public behavior, or scope.
 - Product-code writes require both an approved contract and a user-approved implementation-model choice.
-- The model choice is explicit. Never silently substitute another model or reasoning effort.
+- The model choice is explicit for every dispatched role. Never silently substitute another model or reasoning effort.
 - The approved contract is immutable. A material change requires a new approved revision.
 - Permissions remain bounded by the current host task. An adapter must not broaden authorization.
 - Verification belongs to the implementation worker. The Planner may perform only read-only confirmation after the worker returns.
@@ -46,12 +48,13 @@ Create contracts from [assets/implementation-contract.md](assets/implementation-
 ### Understand the request
 
 1. Separate the request into objective, required behavior, constraints, non-goals, and acceptance criteria.
-2. Inspect relevant repository instructions, code, tests, version state, and uncommitted changes with read-only tools.
-3. Reuse facts already supplied by the user or repository.
-4. Ask only about decisions that materially affect behavior, architecture, compatibility, dependencies, data, destructive operations, or scope.
-5. State low-risk, reversible assumptions explicitly.
+2. Make the routing decision from the Context Routing reference: estimate the discovery surface (files and tokens) and choose the fast lane (direct inspection) or the orchestrated lane (scout subagents). Record the decision and its basis.
+3. Inspect relevant repository instructions, code, tests, version state, and uncommitted changes with read-only tools, either directly (fast lane) or by building an orchestration plan, dispatching read-only scouts on a user-visible cheap model, and merging their evidence packets (orchestrated lane).
+4. Reuse facts already supplied by the user or repository.
+5. Ask only about decisions that materially affect behavior, architecture, compatibility, dependencies, data, destructive operations, or scope.
+6. State low-risk, reversible assumptions explicitly.
 
-Keep planning in the main task. Do not create a separate planning worker.
+Keep planning in the main task. Do not create a separate planning worker. A scout is not a planning worker: it produces evidence only.
 
 ### Prepare the proposal
 
@@ -60,6 +63,7 @@ Present:
 - objective and non-goals;
 - numbered requirements;
 - implementation approach and expected paths;
+- the routing decision and its basis, and for the orchestrated lane the scout model and estimated token spend;
 - constraints and protected existing changes;
 - the applicable bundled coding-rule components the worker must load before editing, or `None`;
 - numbered acceptance criteria;
@@ -127,6 +131,6 @@ For `FAILED`, report the evidence and worktree state. The Planner must not take 
 
 ## Completion
 
-The Planner's final report states the outcome, implementation model, host adapter and version, changed files, acceptance and command evidence, Documentation Impact and evidence, version-control system and baseline, Changelog disposition, commit status or proposed message, push status, unverified items, risks, and contract path and revision.
+The Planner's final report states the outcome, implementation model, host adapter and version, routing decision and scout model (when the orchestrated lane ran), changed files, acceptance and command evidence, Documentation Impact and evidence, version-control system and baseline, Changelog disposition, commit status or proposed message, push status, unverified items, risks, and contract path and revision.
 
 Do not stage, commit, push, deploy, publish, delete user work, or perform another external write unless the approved contract explicitly authorizes the exact action. Commit authority never implies push authority.

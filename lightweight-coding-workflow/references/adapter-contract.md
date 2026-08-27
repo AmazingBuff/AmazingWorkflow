@@ -1,6 +1,6 @@
 # Host Adapter Contract
 
-Contract version: `0.5`.
+Contract version: `0.6`.
 
 This reference defines the interface between the host-neutral [Core protocol](protocol.md) and a host-specific adapter. An adapter is an instruction mapping, not a new runtime or dependency.
 
@@ -24,7 +24,7 @@ Adapter ids and versions are immutable inputs to an approved contract. Changing 
 
 ## Required capabilities and operations
 
-An adapter artifact declares every capability exactly once and maps its operation to a concrete host mechanism or, for a non-`VERIFIED` artifact, a candidate mechanism that cannot be executed for product writes.
+An adapter artifact declares every required capability exactly once and maps its operation to a concrete host mechanism or, for a non-`VERIFIED` artifact, a candidate mechanism that cannot be executed for product writes. It may additionally declare the optional `read_only_scout_dispatch` capability with its own concrete mapping; a `VERIFIED` adapter without it is still eligible for implementation writes.
 
 | Capability id | Required operation | Required outcome |
 | --- | --- | --- |
@@ -37,6 +37,14 @@ An adapter artifact declares every capability exactly once and maps its operatio
 | `progress_reporting` | `report_progress` | Observe worker progress while keeping raw implementation output out of the Planner's decision context. |
 | `result_relay` | `relay_result` | Return exactly one Core `DONE`, `BLOCKED`, or `FAILED` result, including `DOCUMENTATION` evidence, without loss or status rewriting. |
 | `version_control_management` | `manage_version_control` | Inspect version-control state without mutation by default, and perform only contract-authorized staging, commit, and separately authorized push operations. |
+
+Optional capability (protocol `0.6`, per the [Context Routing reference](context-routing.md)):
+
+| Capability id | Optional operation | Required outcome |
+| --- | --- | --- |
+| `read_only_scout_dispatch` | `dispatch_scout` | Start read-only scout subagents with a validated (typically cheaper) model, pass each scout exactly its task packet and assigned source selectors, and relay evidence packets back without granting any write path. |
+
+An adapter without `read_only_scout_dispatch` remains fully valid: the Core restricts the Planner to the fast lane (direct inspection) on that host and the proposal records that restriction. The capability must never be implied by the presence of `worker_dispatch`; scouting is read-only Phase 1 discovery, dispatches its own role, and requires its own verified mapping.
 
 Each operation mapping states:
 
@@ -73,7 +81,7 @@ The Planner performs this read-only gate before requesting implementation approv
 7. Record `host_adapter` and `adapter_version` in the proposal and approved contract.
 8. Repeat capability, support-state, and version validation immediately before worker dispatch.
 
-Protocol `0.5` defines no implicit compatibility range for older adapter metadata. Historical approved contracts use their matching historical resources or are replaced by a newly approved revision.
+Protocol `0.6` defines no implicit compatibility range for older adapter metadata. Historical approved contracts use their matching historical resources or are replaced by a newly approved revision. An `0.5` adapter presented to a `0.6` Core is not compatible as-is: it either gains a `0.6` metadata revision (optionally declaring `read_only_scout_dispatch`) or the task runs on the fast lane with an explicitly recorded restriction.
 
 Selection is per task. Never merge two partial adapters, select an adapter by filename alone, promote an artifact through consent, or fall back to an ineligible state.
 
@@ -109,6 +117,7 @@ Before setting `support_state: VERIFIED`, exercise all required operations on ea
 - rejection of staging, commit, and push when their exact authorities are absent;
 - exact-path staging, staged-diff inspection, a compliant commit, clean post-commit state, and separately authorized push handling in an isolated Git fixture;
 - capability-unavailable behavior before writes for every non-`VERIFIED` state;
+- for adapters declaring `read_only_scout_dispatch`: dispatch of a scout with a validated cheap model, enforcement of the read-only scope, return of evidence packets, and confirmation that no write path was exercised;
 - source/install parity and retained package-integrity evidence required by the adapter release.
 
 Non-`VERIFIED` mappings remain inspection-only and cannot be promoted without the evidence above and a deliberate versioned metadata change.

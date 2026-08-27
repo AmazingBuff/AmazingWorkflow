@@ -46,11 +46,21 @@ Rules:
   "id": "fact-point-layout",
   "statement": "Each input point is represented as float4.",
   "provenance": ["src-point-api"],
-  "confidence": "confirmed"
+  "confidence": "confirmed",
+  "always_share": false
 }
 ```
 
+`always_share` is optional and defaults to `false`. Set it to `true` only when every task genuinely needs the fact regardless of which sources it reads.
+
 Valid confidence values are `confirmed`, `inferred`, and `unverified`. An inferred fact must remain labeled as inference through downstream packets and final synthesis.
+
+Fact routing rule: a shared fact is delivered only to tasks whose assigned sources intersect the fact's `provenance` (including inherited shared sources). Two exceptions bypass this filter:
+
+- A fact with empty `provenance` is delivered to every task.
+- A fact with `always_share: true` is delivered to every task regardless of provenance.
+
+If a synthesis-only task with `inherit_shared_sources: false` needs a provenanced fact, mark that fact `always_share: true`; otherwise the routing rule will silently drop it from the task's packet.
 
 ## 3. Orchestration plan
 
@@ -147,7 +157,7 @@ The scheduler must materialize source bytes after packet generation. It must not
 }
 ```
 
-The scheduler should approve, narrow, replace, or deny the request. Approved sources must be recorded in the result packet.
+The scheduler should approve, narrow, replace, or deny the request. Approved sources must be recorded in the result packet. `metrics` in the result packet is optional; a subagent that cannot measure token usage reports the field as absent rather than inventing numbers.
 
 ## 6. Result packet
 

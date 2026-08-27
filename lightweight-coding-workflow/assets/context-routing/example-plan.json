@@ -1,0 +1,194 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "payment-timeout-investigation",
+  "goal": "Locate the cause of intermittent payment timeouts spanning the API layer, service layer, and database access layer, and gather evidence for an implementation contract.",
+  "mode": "balanced",
+  "assumptions": [
+    "Source descriptors refer to one consistent repository revision.",
+    "Token counts are estimates from the source index."
+  ],
+  "budget": {
+    "max_subagents": 3,
+    "max_input_tokens_per_task": 12000,
+    "max_total_dispatched_tokens": 26000,
+    "max_accidental_overlap_ratio": 0.1,
+    "max_shared_source_tokens_per_task": 1200
+  },
+  "shared_context": {
+    "facts": [
+      {
+        "id": "fact-timeout-window",
+        "statement": "Timeouts occur between 5 and 8 seconds after payment submission.",
+        "provenance": [],
+        "confidence": "confirmed",
+        "always_share": true
+      },
+      {
+        "id": "fact-db-pool-size",
+        "statement": "The connection pool caps at 20 connections with a 30-second lease.",
+        "provenance": ["src-db-pool"],
+        "confidence": "confirmed"
+      }
+    ],
+    "constraints": [
+      "Scouts are read-only: no product-code writes, no requirement changes, no user interaction.",
+      "Every material claim must cite a precise source locator."
+    ],
+    "source_ids": [
+      "src-api-types"
+    ]
+  },
+  "sources": [
+    {
+      "id": "src-api-types",
+      "uri": "src/api/types.ts",
+      "selector": {
+        "type": "lines",
+        "start": 1,
+        "end": 120
+      },
+      "estimated_tokens": 900,
+      "purpose": "Shared request/response types and error codes used across all layers",
+      "summary": "Small common interface needed by API and service scouts."
+    },
+    {
+      "id": "src-payment-controller",
+      "uri": "src/api/payment_controller.py",
+      "selector": {
+        "type": "symbol",
+        "name": "PaymentController.submit"
+      },
+      "estimated_tokens": 1400,
+      "purpose": "Payment submission endpoint, timeout configuration, retry behavior"
+    },
+    {
+      "id": "src-service-layer",
+      "uri": "src/services/payment_service.py",
+      "selector": {
+        "type": "lines",
+        "start": 40,
+        "end": 320
+      },
+      "estimated_tokens": 2600,
+      "purpose": "Payment orchestration, transaction boundaries, downstream calls"
+    },
+    {
+      "id": "src-db-pool",
+      "uri": "src/db/connection_pool.py",
+      "selector": {
+        "type": "lines",
+        "start": 1,
+        "end": 180
+      },
+      "estimated_tokens": 1500,
+      "purpose": "Connection pooling, lease handling, timeout propagation"
+    },
+    {
+      "id": "src-logs-sample",
+      "uri": "logs/payment_timeouts.log",
+      "selector": {
+        "type": "lines",
+        "start": 1,
+        "end": 200
+      },
+      "estimated_tokens": 1100,
+      "purpose": "Timestamped timeout traces correlating requests across layers"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-api-scout",
+      "agent_role": "api-scout",
+      "objective": "Determine how the payment endpoint configures timeouts and retries and what the logs show about where the 5-8 second window originates.",
+      "dependencies": [],
+      "source_ids": [
+        "src-payment-controller",
+        "src-logs-sample"
+      ],
+      "questions": [
+        "What is the configured client-facing timeout and does it match the 5-8 second window?",
+        "Do the logs show timeouts originating at the API layer or passed up from below?",
+        "Is there a retry that doubles perceived latency?"
+      ],
+      "deliverable": "Findings on API-layer timeout behavior with exact locators and log line references.",
+      "evidence_required": true,
+      "intentional_overlap": false,
+      "capabilities": [
+        "materialize",
+        "log-analysis"
+      ],
+      "allowed_expansion": {
+        "mode": "request",
+        "max_additional_tokens": 2000
+      },
+      "stop_conditions": [
+        "All listed questions are answered or explicitly blocked."
+      ]
+    },
+    {
+      "id": "task-service-scout",
+      "agent_role": "service-scout",
+      "objective": "Determine how the payment service manages transaction boundaries and downstream calls during the timeout window.",
+      "dependencies": [],
+      "source_ids": [
+        "src-service-layer"
+      ],
+      "questions": [
+        "Which downstream calls sit on the critical path of payment submission?",
+        "Are transaction boundaries held across slow calls?",
+        "Is there any lock or serialization point on the payment path?"
+      ],
+      "deliverable": "Findings on service-layer call structure with exact locators.",
+      "evidence_required": true,
+      "intentional_overlap": false,
+      "capabilities": [
+        "materialize",
+        "code-analysis"
+      ],
+      "allowed_expansion": {
+        "mode": "request",
+        "max_additional_tokens": 2500
+      },
+      "stop_conditions": [
+        "All critical-path calls and their failure modes are accounted for."
+      ]
+    },
+    {
+      "id": "task-db-scout",
+      "agent_role": "db-scout",
+      "objective": "Determine whether connection-pool lease behavior explains intermittent timeouts.",
+      "dependencies": [],
+      "source_ids": [
+        "src-db-pool"
+      ],
+      "questions": [
+        "Can pool exhaustion delay connection acquisition past the client timeout?",
+        "Are leases released on all failure paths?",
+        "Does the pool timeout propagate as a retryable error?"
+      ],
+      "deliverable": "Findings on pool behavior under load with exact locators.",
+      "evidence_required": true,
+      "intentional_overlap": false,
+      "capabilities": [
+        "materialize",
+        "code-analysis"
+      ],
+      "allowed_expansion": {
+        "mode": "request",
+        "max_additional_tokens": 2000
+      },
+      "stop_conditions": [
+        "All lease acquisition and release paths in scope are accounted for."
+      ]
+    }
+  ],
+  "merge": {
+    "strategy": "evidence-weighted",
+    "conflict_policy": "independent-review-on-material-conflict",
+    "final_checks": [
+      "Every accepted material finding has a source locator.",
+      "The root-cause hypothesis is consistent with the log timeline.",
+      "No conclusion depends on mismatched source versions."
+    ]
+  }
+}

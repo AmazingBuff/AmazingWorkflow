@@ -4,7 +4,7 @@ revision: {{REVISION}}
 status: "APPROVED"
 created_at: "{{ISO_8601_TIMESTAMP}}"
 supersedes: null
-protocol_version: "0.5"
+protocol_version: "0.6"
 host_adapter: "{{VERIFIED_HOST_ADAPTER_ID}}"
 adapter_version: "{{VERIFIED_ADAPTER_VERSION}}"
 implementation_model: "{{USER_APPROVED_MODEL_OR_INHERIT_PARENT}}"
@@ -20,6 +20,16 @@ baseline_revision: "{{GIT_REVISION_OR_NOT_APPLICABLE}}"
 ## Objective
 
 {{ONE_VERIFIABLE_OBJECTIVE}}
+
+## Discovery
+
+- Routing: `{{DIRECT_OR_ORCHESTRATED}}`
+- Basis: {{FILES_AND_TOKEN_ESTIMATE_OR_OTHER_ROUTING_BASIS}}
+- Scout model: `{{MODEL_OR_NOT_APPLICABLE}}`
+- Discovery token spend: {{ESTIMATED_AND_MEASURED_TOKENS_OR_NOT_APPLICABLE}}
+- Evidence-locator index: {{LOCATOR_REFERENCES_OR_NOT_APPLICABLE}}
+
+Requirements and acceptance criteria below reference surviving locators (`path:symbol`, `path:lines a-b`) from this index so the worker starts from precise coordinates. Use `direct` with a stated basis when no scouts ran; `orchestrated` requires the scout model and spend fields.
 
 ## Requirements
 

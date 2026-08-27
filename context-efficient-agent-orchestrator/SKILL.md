@@ -22,6 +22,10 @@ Map the host environment to these abstract capabilities before planning:
 
 Use the available tools that best implement each capability. If `dispatch` is unavailable, produce an integration-ready plan and task packets; never claim that subagents were executed.
 
+Interactive coding-agent host: when the host offers a subagent-dispatch tool but no separate materialization layer, the main agent acts as its own scheduler. It reads the assigned selector ranges itself, embeds the fragments into each subagent prompt after the task instructions, and applies the result-packet contract to the subagent's reply. When the host provides a read-only explorer subagent type, prefer it for scout work so the read scope stays enforced by the host, not by prompt discipline alone.
+
+For coding tasks specifically, prefer the integrated form of this skill bundled inside `lightweight-coding-workflow` (see its `references/context-routing.md`); it adds model routing, an approval-gated dispatch path, and a small-task fast lane. This standalone skill remains the general-purpose version for non-coding corpora.
+
 ## Workflow
 
 ### 0. Apply the delegation gate
@@ -218,3 +222,4 @@ Read `references/contracts.md` for exact fields. Read `references/examples.md` w
 - `references/contracts.md`: plan, task, result, and expansion contracts.
 - `references/examples.md`: common decomposition patterns.
 - `references/rust-integration.md`: Rust-friendly data structures and scheduler adapter pattern.
+- `agents/openai.yaml`: display metadata for OpenAI-hosted skill listings; not used at runtime.
