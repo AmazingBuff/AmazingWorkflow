@@ -1,0 +1,225 @@
+{
+  "schema_version": "1.0",
+  "plan_id": "gpu-point-cloud-review",
+  "goal": "Review a GPU point-cloud reconstruction pipeline and determine whether transformation, merging, memory ownership, and synchronization are implemented correctly.",
+  "mode": "balanced",
+  "assumptions": [
+    "The source descriptors refer to one consistent repository revision.",
+    "Token counts are estimates produced from the source index."
+  ],
+  "budget": {
+    "max_subagents": 4,
+    "max_input_tokens_per_task": 12000,
+    "max_total_dispatched_tokens": 30000,
+    "max_accidental_overlap_ratio": 0.1,
+    "max_shared_source_tokens_per_task": 1200
+  },
+  "shared_context": {
+    "facts": [
+      {
+        "id": "fact-point-layout",
+        "statement": "Each input point uses a float4-compatible layout.",
+        "provenance": [
+          "src-point-api"
+        ],
+        "confidence": "confirmed"
+      },
+      {
+        "id": "fact-device-residency",
+        "statement": "Input point clouds already reside in device memory at separate addresses.",
+        "provenance": [
+          "src-pipeline"
+        ],
+        "confidence": "confirmed"
+      }
+    ],
+    "constraints": [
+      "Do not recommend host round-trips unless evidence shows they are unavoidable.",
+      "Preserve exact source locators for every material finding."
+    ],
+    "source_ids": [
+      "src-point-api"
+    ]
+  },
+  "sources": [
+    {
+      "id": "src-point-api",
+      "uri": "include/point_cloud.hpp",
+      "selector": {
+        "type": "lines",
+        "start": 45,
+        "end": 130
+      },
+      "estimated_tokens": 900,
+      "purpose": "Shared point representation, matrix layout, and ownership declarations",
+      "summary": "Small common interface needed by kernel and memory reviewers."
+    },
+    {
+      "id": "src-transform-kernel",
+      "uri": "src/transform.cu",
+      "selector": {
+        "type": "lines",
+        "start": 120,
+        "end": 380
+      },
+      "estimated_tokens": 2800,
+      "purpose": "Point transformation kernel, launch dimensions, and matrix indexing"
+    },
+    {
+      "id": "src-memory-pool",
+      "uri": "src/memory_pool.cpp",
+      "selector": {
+        "type": "lines",
+        "start": 80,
+        "end": 260
+      },
+      "estimated_tokens": 1900,
+      "purpose": "GPU allocation, buffer ownership, and release behavior"
+    },
+    {
+      "id": "src-pipeline",
+      "uri": "src/reconstruction.cpp",
+      "selector": {
+        "type": "symbol",
+        "name": "reconstruct_global_cloud"
+      },
+      "estimated_tokens": 2300,
+      "purpose": "Transform, merge, stream synchronization, and reconstruction ordering"
+    },
+    {
+      "id": "src-benchmark",
+      "uri": "benchmarks/reconstruction_profile.json",
+      "selector": {
+        "type": "object",
+        "key": "latest/global-cloud"
+      },
+      "estimated_tokens": 700,
+      "purpose": "Measured stage timing and memory-traffic evidence"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-transform",
+      "agent_role": "cuda-kernel-reviewer",
+      "objective": "Verify launch bounds, matrix layout, memory access, and per-cloud transformation correctness.",
+      "dependencies": [],
+      "source_ids": [
+        "src-transform-kernel"
+      ],
+      "questions": [
+        "Can a thread read or write outside the valid point range?",
+        "Is matrix layout consistent between host declarations and device indexing?",
+        "Does the kernel introduce avoidable global-memory traffic?"
+      ],
+      "deliverable": "Prioritized kernel findings with source locators and concrete fixes.",
+      "evidence_required": true,
+      "intentional_overlap": false,
+      "capabilities": [
+        "materialize",
+        "cuda-analysis"
+      ],
+      "allowed_expansion": {
+        "mode": "request",
+        "max_additional_tokens": 3000
+      },
+      "stop_conditions": [
+        "Every listed question is answered or explicitly blocked."
+      ]
+    },
+    {
+      "id": "task-memory",
+      "agent_role": "gpu-memory-reviewer",
+      "objective": "Verify device-buffer ownership, allocation lifetime, and synchronization around buffer reuse.",
+      "dependencies": [],
+      "source_ids": [
+        "src-memory-pool"
+      ],
+      "questions": [
+        "Can any buffer be reused before its stream work completes?",
+        "Are repeated allocations on the critical path avoidable?",
+        "Is ownership unambiguous across the reconstruction stage?"
+      ],
+      "deliverable": "Memory-lifecycle findings with exact evidence and proposed ownership changes.",
+      "evidence_required": true,
+      "intentional_overlap": false,
+      "capabilities": [
+        "materialize",
+        "lifetime-analysis"
+      ],
+      "allowed_expansion": {
+        "mode": "request",
+        "max_additional_tokens": 3000
+      },
+      "stop_conditions": [
+        "All allocation, reuse, and release paths in scope are accounted for."
+      ]
+    },
+    {
+      "id": "task-pipeline",
+      "agent_role": "gpu-pipeline-analyst",
+      "objective": "Determine the best transform-and-merge ordering from the implementation and benchmark evidence.",
+      "dependencies": [],
+      "source_ids": [
+        "src-pipeline",
+        "src-benchmark"
+      ],
+      "questions": [
+        "Does the current order add synchronization or copies?",
+        "Can transformed outputs be written directly into their final offsets?",
+        "Which recommendation is supported by measured bottlenecks?"
+      ],
+      "deliverable": "An implementation-specific ordering recommendation with complexity, memory-traffic, and benchmark evidence.",
+      "evidence_required": true,
+      "intentional_overlap": false,
+      "capabilities": [
+        "materialize",
+        "performance-analysis"
+      ],
+      "allowed_expansion": {
+        "mode": "bounded",
+        "max_additional_tokens": 2500
+      },
+      "stop_conditions": [
+        "The recommendation is tied to both implementation behavior and available measurements."
+      ]
+    },
+    {
+      "id": "task-synthesis-check",
+      "agent_role": "architecture-reviewer",
+      "objective": "Check whether upstream conclusions jointly support one safe and efficient reconstruction design.",
+      "dependencies": [
+        "task-transform",
+        "task-memory",
+        "task-pipeline"
+      ],
+      "source_ids": [],
+      "questions": [
+        "Do the upstream findings conflict on buffer layout, ordering, or synchronization?",
+        "What is the smallest design change that addresses all confirmed issues?"
+      ],
+      "deliverable": "A consistency review of upstream evidence, with any material conflict explicitly identified.",
+      "evidence_required": true,
+      "intentional_overlap": false,
+      "capabilities": [
+        "result-synthesis"
+      ],
+      "allowed_expansion": {
+        "mode": "request",
+        "max_additional_tokens": 2000
+      },
+      "stop_conditions": [
+        "All material upstream findings are accepted, rejected, or marked unresolved."
+      ],
+      "inherit_shared_sources": false
+    }
+  ],
+  "merge": {
+    "strategy": "evidence-weighted",
+    "conflict_policy": "independent-review-on-material-conflict",
+    "final_checks": [
+      "Every accepted material finding has a source locator.",
+      "The final recommendation fits the measured bottleneck.",
+      "No conclusion depends on mismatched source versions."
+    ]
+  }
+}

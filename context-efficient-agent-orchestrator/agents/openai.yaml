@@ -1,0 +1,3 @@
+interface:
+  display_name: "Context-Efficient Agent Orchestrator"
+  short_description: "Scope, budget, dispatch, and merge subagent work"

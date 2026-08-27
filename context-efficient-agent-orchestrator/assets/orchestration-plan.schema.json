@@ -1,0 +1,445 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/context-efficient-agent-orchestrator/orchestration-plan.schema.json",
+  "title": "Context-Efficient Agent Orchestration Plan",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "plan_id",
+    "goal",
+    "mode",
+    "budget",
+    "shared_context",
+    "sources",
+    "tasks",
+    "merge"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "plan_id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "enum": [
+        "lean",
+        "balanced",
+        "independent-review",
+        "high-assurance"
+      ]
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "budget": {
+      "$ref": "#/$defs/budget"
+    },
+    "shared_context": {
+      "$ref": "#/$defs/sharedContext"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/task"
+      }
+    },
+    "merge": {
+      "$ref": "#/$defs/merge"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "max_subagents",
+        "max_input_tokens_per_task",
+        "max_total_dispatched_tokens",
+        "max_accidental_overlap_ratio",
+        "max_shared_source_tokens_per_task"
+      ],
+      "properties": {
+        "max_subagents": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_input_tokens_per_task": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_total_dispatched_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_accidental_overlap_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_shared_source_tokens_per_task": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "statement",
+        "provenance",
+        "confidence"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "confidence": {
+          "enum": [
+            "confirmed",
+            "inferred",
+            "unverified"
+          ]
+        },
+        "always_share": {
+          "type": "boolean"
+        }
+      }
+    },
+    "sharedContext": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "facts",
+        "constraints",
+        "source_ids"
+      ],
+      "properties": {
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fact"
+          }
+        },
+        "constraints": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    },
+    "selector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "start",
+            "end"
+          ],
+          "properties": {
+            "type": {
+              "const": "lines"
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "start",
+            "end"
+          ],
+          "properties": {
+            "type": {
+              "const": "pages"
+            },
+            "start": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "end": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "symbol"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "heading"
+          ],
+          "properties": {
+            "type": {
+              "const": "section"
+            },
+            "heading": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "key"
+          ],
+          "properties": {
+            "type": {
+              "const": "object"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "query"
+          ],
+          "properties": {
+            "type": {
+              "const": "query"
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1
+            },
+            "top_k": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "whole"
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "uri",
+        "selector",
+        "estimated_tokens",
+        "purpose"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selector": {
+          "$ref": "#/$defs/selector"
+        },
+        "estimated_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        }
+      }
+    },
+    "expansionPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "mode",
+        "max_additional_tokens"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "deny",
+            "request",
+            "bounded"
+          ]
+        },
+        "max_additional_tokens": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "agent_role",
+        "objective",
+        "dependencies",
+        "source_ids",
+        "questions",
+        "deliverable",
+        "evidence_required",
+        "intentional_overlap",
+        "allowed_expansion",
+        "stop_conditions"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "agent_role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencies": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "questions": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "deliverable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_required": {
+          "type": "boolean"
+        },
+        "intentional_overlap": {
+          "type": "boolean"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "allowed_expansion": {
+          "$ref": "#/$defs/expansionPolicy"
+        },
+        "stop_conditions": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "inherit_shared_sources": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "merge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "strategy",
+        "conflict_policy",
+        "final_checks"
+      ],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conflict_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "final_checks": {
+          "$ref": "#/$defs/stringArray"
+        }
+      }
+    }
+  }
+}

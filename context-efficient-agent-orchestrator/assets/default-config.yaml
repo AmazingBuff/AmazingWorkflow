@@ -1,0 +1,87 @@
+schema_version: "1.0"
+active_mode: balanced
+
+mode_profiles:
+  lean:
+    max_subagents: 3
+    max_input_tokens_per_task: 10000
+    max_total_dispatched_tokens: 26000
+    max_accidental_overlap_ratio: 0.05
+    max_shared_source_tokens_per_task: 800
+    default_expansion_mode: request
+    default_expansion_tokens: 2000
+
+  balanced:
+    max_subagents: 5
+    max_input_tokens_per_task: 18000
+    max_total_dispatched_tokens: 70000
+    max_accidental_overlap_ratio: 0.15
+    max_shared_source_tokens_per_task: 1500
+    default_expansion_mode: request
+    default_expansion_tokens: 4000
+
+  independent-review:
+    max_subagents: 6
+    max_input_tokens_per_task: 22000
+    max_total_dispatched_tokens: 100000
+    max_accidental_overlap_ratio: 0.10
+    max_shared_source_tokens_per_task: 1800
+    default_expansion_mode: request
+    default_expansion_tokens: 5000
+
+  high-assurance:
+    max_subagents: 8
+    max_input_tokens_per_task: 30000
+    max_total_dispatched_tokens: 180000
+    max_accidental_overlap_ratio: 0.10
+    max_shared_source_tokens_per_task: 2500
+    default_expansion_mode: bounded
+    default_expansion_tokens: 8000
+
+source_selection:
+  main_agent_policy: index-first
+  preferred_selectors:
+    - symbol
+    - section
+    - object
+    - query
+    - lines
+    - pages
+    - whole
+  warn_whole_source_above_tokens: 4000
+  require_estimated_tokens: true
+  require_version_or_hash_for_mutable_sources: false
+
+shared_context:
+  pass_parent_transcript: false
+  transfer_private_reasoning: false
+  include_only_provenanced_facts: false
+  fact_confidence_values:
+    - confirmed
+    - inferred
+    - unverified
+
+dispatch:
+  build_packets_before_invocation: true
+  materialize_sources_after_packet_build: true
+  recursive_delegation: deny
+  dependency_context: compact-facts-only
+  prompt_order:
+    - stable_role_and_contract
+    - stable_project_definitions
+    - shared_facts_and_constraints
+    - task_specific_instructions
+    - materialized_sources
+
+results:
+  require_source_ids: true
+  require_precise_locators_for_material_findings: true
+  require_confidence: true
+  allow_private_chain_of_thought: false
+
+merge:
+  strategy: evidence-weighted
+  conflict_policy: independent-review-on-material-conflict
+  reject_unsupported_material_claims: true
+  preserve_source_versions: true
+  persist_confirmed_facts: true
