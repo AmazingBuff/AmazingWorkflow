@@ -63,8 +63,29 @@ def check_equal(
         errors.append(f"{label} drift: expected {expected!r}, got {actual!r}")
 
 
+def normalized_sha256(path: Path) -> str:
+    """Return a SHA-256 digest with line endings normalized to LF.
+
+    Matches the digest semantics of validate_plan.py so CRLF and LF
+    checkouts of the same text produce identical digests; undecodable
+    (binary) content falls back to hashing the raw bytes.
+    """
+    try:
+        payload = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"unable to hash file: {path}: {exc}") from exc
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError:
+        digest_input: bytes = payload
+    else:
+        digest_input = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+    return hashlib.sha256(digest_input).hexdigest()
+
+
 def read_front_matter(path: Path) -> dict[str, str | None]:
     content = path.read_text(encoding="utf-8")
+    content = content.lstrip("\ufeff").replace("\r\n", "\n")
     if not content.startswith("---\n"):
         raise ValueError(f"contract has no YAML front matter: {path}")
     end = content.find("\n---", 4)
@@ -72,7 +93,7 @@ def read_front_matter(path: Path) -> dict[str, str | None]:
         raise ValueError(f"contract front matter is unterminated: {path}")
     values: dict[str, str | None] = {}
     for line in content[4:end].splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
+        if not line.strip() or line.lstrip().startswith(("#", "-")):
             continue
         key, separator, raw_value = line.partition(":")
         if not separator or not key.strip():
@@ -101,11 +122,27 @@ def validate_approved_contract(
     errors: list[str] = []
     try:
         contract = read_front_matter(contract_path)
+    except (OSError, UnicodeError, ValueError) as exc:
+        return [f"contract evidence check: {exc}"]
+
+    host_adapter = contract.get("host_adapter")
+    if isinstance(host_adapter, str) and host_adapter.strip() and "{{" not in host_adapter:
+        adapter_name = Path(host_adapter).name
+        selected_adapter = root / "references/adapters" / f"{adapter_name}.md"
+        if adapter_name != host_adapter or not selected_adapter.is_file():
+            errors.append(
+                f"contract evidence check: unknown adapter {host_adapter!r}"
+            )
+        else:
+            adapter_path = selected_adapter
+
+    try:
         workflow_text = (root / "SKILL.md").read_text(encoding="utf-8")
         protocol_text = protocol_path.read_text(encoding="utf-8")
         adapter_text = adapter_path.read_text(encoding="utf-8")
+        adapter_meta = read_front_matter(adapter_path)
     except (OSError, UnicodeError, ValueError) as exc:
-        return [f"contract evidence check: {exc}"]
+        return [*errors, f"contract evidence check: {exc}"]
 
     if contract.get("status") != "APPROVED":
         errors.append("contract evidence check: contract status must be APPROVED")
@@ -118,7 +155,9 @@ def validate_approved_contract(
 
     expected_workflow = _source_revision(workflow_text, "Workflow revision")
     expected_protocol = _source_revision(protocol_text, "Protocol version")
-    expected_adapter = _source_revision(adapter_text, "adapter_version")
+    expected_adapter = adapter_meta.get("adapter_version") or _source_revision(
+        adapter_text, "adapter_version"
+    )
     check_equal(
         expected_workflow,
         WORKFLOW_REVISION,
@@ -129,12 +168,6 @@ def validate_approved_contract(
         expected_protocol,
         CORE_PROTOCOL_VERSION,
         "declared Core protocol version",
-        errors,
-    )
-    check_equal(
-        expected_adapter,
-        CODEX_ADAPTER_VERSION,
-        "declared Codex adapter version",
         errors,
     )
     check_equal(
@@ -149,22 +182,32 @@ def validate_approved_contract(
     check_equal(
         contract.get("adapter_version"), expected_adapter, "contract adapter version", errors
     )
-    if contract.get("host_adapter") != "codex":
+    if contract.get("host_adapter") != adapter_meta.get("host_adapter"):
         errors.append("contract evidence check: host_adapter must identify the selected adapter")
 
     protocol_digest = contract.get("protocol_sha256")
     adapter_digest = contract.get("adapter_sha256")
-    if isinstance(protocol_digest, str) and SHA256_PATTERN.fullmatch(protocol_digest):
+    if not (isinstance(protocol_digest, str) and SHA256_PATTERN.fullmatch(protocol_digest)):
+        if isinstance(protocol_digest, str) and protocol_digest.strip():
+            errors.append(
+                f"contract evidence check: protocol_sha256 invalid sha256 format: {protocol_digest}"
+            )
+    else:
         check_equal(
             protocol_digest,
-            f"sha256:{hashlib.sha256(protocol_path.read_bytes()).hexdigest()}",
+            f"sha256:{normalized_sha256(protocol_path)}",
             "contract protocol SHA-256",
             errors,
         )
-    if isinstance(adapter_digest, str) and SHA256_PATTERN.fullmatch(adapter_digest):
+    if not (isinstance(adapter_digest, str) and SHA256_PATTERN.fullmatch(adapter_digest)):
+        if isinstance(adapter_digest, str) and adapter_digest.strip():
+            errors.append(
+                f"contract evidence check: adapter_sha256 invalid sha256 format: {adapter_digest}"
+            )
+    else:
         check_equal(
             adapter_digest,
-            f"sha256:{hashlib.sha256(adapter_path.read_bytes()).hexdigest()}",
+            f"sha256:{normalized_sha256(adapter_path)}",
             "contract adapter SHA-256",
             errors,
         )

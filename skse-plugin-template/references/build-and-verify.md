@@ -71,10 +71,16 @@ baseline, versions, runtime references, and license details together.
 
 ## External coding-rule authority
 
-The generated project uses the repository sibling
-`../../lightweight-coding-workflow/assets/coding-rules/`
-and its `manifest.json` as the canonical rule source. A separately copied SKSE
-rule set, fallback, symlink, or second hash inventory is not allowed.
+The generated project uses the installed
+`lightweight-coding-workflow` skill's `assets/coding-rules/`
+directory and its `manifest.json` as the canonical rule source.
+Locate that skill through the host's skill-discovery mechanism and resolve
+the rule paths inside its root; do not assume a relative sibling path and do
+not fall back to guessing. A separately copied SKSE rule set, fallback,
+symlink, or second hash inventory is not allowed. When the
+lightweight-coding-workflow skill is not installed, treat the rule authority
+as unavailable and record scaffolding or maintenance work as blocked on that
+missing dependency rather than proceeding without it.
 
 Update the rules only in the lightweight source through a separately approved
 change. Keep the shared code contract, applicable C++ references, manifest

@@ -7,6 +7,10 @@ references, dependency cycles, token budgets, expansion policy, and accidental
 source overlap. Token estimates are planning approximations, not billing
 truth; the estimator weights CJK characters near one token per character and
 other text near four characters per token.
+
+The configuration digest is computed over the configuration content with line
+endings normalized to LF, so the same configuration blob hashes identically
+across CRLF (Windows autocrlf) and LF (Linux/macOS) checkouts.
 """
 
 from __future__ import annotations
@@ -190,6 +194,26 @@ def sha256_file(path: Path) -> str:
     except OSError as exc:
         raise ValueError(f"unable to hash file: {path}: {exc}") from exc
     return digest.hexdigest()
+
+
+def sha256_text_normalized(path: Path) -> str:
+    """Return a SHA-256 digest that is stable across CRLF and LF checkouts.
+
+    Reads the file as bytes; when the content decodes as UTF-8 text, line
+    endings are normalized to LF (``\\r\\n`` and lone ``\\r`` both become
+    ``\\n``) before hashing. Binary content that cannot be decoded as UTF-8
+    falls back to hashing the raw bytes.
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"unable to hash file: {path}: {exc}") from exc
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return hashlib.sha256(raw).hexdigest()
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def load_plan(path: Path) -> dict[str, Any]:
@@ -385,7 +409,7 @@ def validate_plan(
         errors.append("configuration.digest must use the sha256:<64-hex-digits> format")
     elif resolved_config_path.is_file():
         try:
-            expected_digest = f"sha256:{sha256_file(resolved_config_path)}"
+            expected_digest = f"sha256:{sha256_text_normalized(resolved_config_path)}"
         except ValueError as exc:
             errors.append(str(exc))
         else:
@@ -489,9 +513,20 @@ def validate_plan(
     )
     if isinstance(effective_profile, dict) and mode in VALID_MODES:
         for field in REQUIRED_BUDGET_FIELDS:
-            if budget.get(field) != effective_profile.get(field):
+            plan_value = budget.get(field)
+            profile_value = effective_profile.get(field)
+            if plan_value is None:
+                continue
+            if not isinstance(plan_value, (int, float)) or isinstance(plan_value, bool):
+                continue
+            if not isinstance(profile_value, (int, float)) or isinstance(
+                profile_value, bool
+            ):
+                continue
+            if float(plan_value) > float(profile_value):
                 errors.append(
-                    f"budget.{field} must match the effective {mode!r} configuration profile"
+                    f"budget.{field} value {plan_value} exceeds the effective "
+                    f"{mode!r} configuration profile limit ({profile_value})"
                 )
 
     shared_context = plan.get("shared_context")
@@ -746,10 +781,11 @@ def validate_plan(
     ):
         errors.append("discovery_authorization.token_ceiling must be an integer >= 1")
     elif isinstance(budget.get("max_total_dispatched_tokens"), int) and (
-        token_ceiling != budget["max_total_dispatched_tokens"]
+        token_ceiling > budget["max_total_dispatched_tokens"]
     ):
         errors.append(
-            "discovery_authorization.token_ceiling must equal budget.max_total_dispatched_tokens"
+            "discovery_authorization.token_ceiling must not exceed "
+            "budget.max_total_dispatched_tokens"
         )
 
     scout_policy = effective_config.get("scout_policy", {})

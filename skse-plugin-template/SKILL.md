@@ -1,18 +1,33 @@
 ---
 name: skse-plugin-template
-description: Scaffold or maintain a canonical-rule-compliant C++23 Skyrim SKSE plugin for SE, AE, and VR with alandtse/CommonLibSSE-NG branch ng, project namespaces, CMake 3.25 Debug/Release presets, optional config/hotkey/Present/vtable/event modules, GPL-3.0-or-later output, and direct use of the sibling lightweight coding-rule authority.
+description: Scaffold or maintain a canonical-rule-compliant C++23 Skyrim SKSE plugin for SE, AE, and VR with alandtse/CommonLibSSE-NG branch ng, project namespaces, CMake 3.25 Debug/Release presets, optional config/hotkey/Present/vtable/event modules, GPL-3.0-or-later output, and direct use of the sibling lightweight-coding-workflow skill's coding-rule authority. Use only when the lightweight-coding-workflow skill is installed and discoverable; when it is absent, this skill does not apply - report that the required rule authority is missing instead of proceeding without it.
 ---
 
 # SKSE Plugin Template
 
-This Skill generates one CommonLibSSE-NG plugin project and deliberately
-requires the sibling `lightweight-coding-workflow` Skill.
-It is not standalone: use the canonical
-[C++ rule index](../lightweight-coding-workflow/assets/coding-rules/small-project-cpp-rules/SKILL.md),
-[shared code contract](../lightweight-coding-workflow/assets/coding-rules/small-project-code-contract/SKILL.md),
-and [manifest](../lightweight-coding-workflow/assets/coding-rules/manifest.json)
-directly. A local rule copy, fallback, symlink, or second hash inventory is
-forbidden; the sibling rule paths are part of the required execution context.
+This Skill generates one CommonLibSSE-NG plugin project. It is not
+standalone: it requires the `lightweight-coding-workflow` skill's coding-rule
+authority.
+
+**Presence gate**: before doing anything else, locate the
+`lightweight-coding-workflow` skill through the host's skill-discovery
+mechanism (loaded skill metadata, the skill catalog, or an installed skills
+directory such as `<project>/.zcode/skills/`, `<project>/.agents/skills/`,
+`~/.zcode/skills/`, or `~/.agents/skills/`). Do not assume a relative
+sibling path and do not proceed by guessing. If the skill is not installed
+and discoverable, stop and report that the required coding-rule authority is
+missing; do not scaffold with a local rule copy, fallback, or synthesized
+rules.
+
+Once located, use the canonical rule documents **within that skill's
+directory**:
+
+- `[lightweight-coding-workflow root]/assets/coding-rules/small-project-cpp-rules/SKILL.md` (C++ rule index)
+- `[lightweight-coding-workflow root]/assets/coding-rules/small-project-code-contract/SKILL.md` (shared code contract)
+- `[lightweight-coding-workflow root]/assets/coding-rules/manifest.json` (hash inventory)
+
+A local rule copy, fallback, symlink, or second hash inventory is forbidden;
+the discovered skill's rule paths are part of the required execution context.
 
 ## When to use
 
@@ -66,9 +81,12 @@ real submodule add, commit both `.gitmodules` and the
    options, address resolution, or plugin metadata.
 2. Read [build-and-verify.md](references/build-and-verify.md) before changing
    presets, CommonLib/vcpkg acquisition, dependencies, or build boundaries.
-3. Before C++ or CMake work, read every applicable document from the sibling
-   [C++ rule index](../lightweight-coding-workflow/assets/coding-rules/small-project-cpp-rules/SKILL.md)
-   and its [shared code contract](../lightweight-coding-workflow/assets/coding-rules/small-project-code-contract/SKILL.md).
+3. Pass the presence gate above before any scaffold or maintenance work.
+   Before C++ or CMake work, read every applicable document from the
+   discovered `lightweight-coding-workflow` skill's
+   `assets/coding-rules/small-project-cpp-rules/SKILL.md` C++ rule index and
+   its `assets/coding-rules/small-project-code-contract/SKILL.md` shared
+   code contract.
 4. Keep the generator, every template, generated README/license/resource
    metadata, and the two focused references consistent.
 

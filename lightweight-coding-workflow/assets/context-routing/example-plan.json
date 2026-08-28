@@ -7,7 +7,7 @@
     "id": "context-routing-defaults",
     "source": "assets/context-routing/default-config.yaml",
     "revision": 1,
-    "digest": "sha256:0c3962c086763a7f2178d2cb0b9b88f8396e8918cd9683c3b0a23328289a7560"
+    "digest": "sha256:1ec271879d6ba6613d74ac8c5756a85cc9ee501fdf1bf6b30ee25a4e4c6c853c"
   },
   "routing": {
     "decision": "orchestrated",
@@ -45,7 +45,9 @@
       {
         "id": "fact-db-pool-size",
         "statement": "The connection pool caps at 20 connections with a 30-second lease.",
-        "provenance": ["src-db-pool"],
+        "provenance": [
+          "src-db-pool"
+        ],
         "confidence": "confirmed"
       }
     ],
