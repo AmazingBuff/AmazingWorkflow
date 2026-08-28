@@ -2,7 +2,7 @@
 
 Contract version: `0.6` (part of the Core protocol at the same version).
 
-Field contracts for the Phase 1 scout orchestration defined in the [Context Routing reference](context-routing.md). These are the shapes `scripts/validate_plan.py` checks and `scripts/build_task_packets.py` generates; the machine-readable source of truth for plan validation is `assets/context-routing/orchestration-plan.schema.json`. This is a self-contained coding-scoped copy of the general orchestration contracts, trimmed to what scout routing uses.
+Field contracts for the Phase 1 scout orchestration defined in the [Context Routing reference](context-routing.md). These are the shapes `scripts/validate_plan.py` checks and `scripts/build_task_packets.py` generates; the JSON Schemas under `assets/context-routing/` are checked mirrors, not an independent unverified authority. This is a self-contained coding-scoped copy of the general orchestration contracts, trimmed to what scout routing uses.
 
 ## 1. Source descriptor
 
@@ -41,7 +41,7 @@ Supported selector shapes:
 {"type":"whole"}
 ```
 
-Prefer selectors that remain stable as content changes: symbol, section, and object selectors are generally more stable than line ranges. Add `content_hash` or a version identifier when stale-source detection matters.
+Prefer selectors that remain stable as content changes: symbol, section, and object selectors are generally more stable than line ranges. Add `content_hash` or a source revision/digest when stale-source detection matters; use line ranges only when no stable selector exists.
 
 ## 2. Shared fact
 
@@ -70,15 +70,34 @@ Minimal shape:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "plan_id": "payment-timeout-investigation",
   "goal": "Locate the cause of intermittent payment timeouts and gather evidence for an implementation contract.",
   "mode": "balanced",
+  "configuration": {
+    "id": "context-routing-defaults",
+    "source": "assets/context-routing/default-config.yaml",
+    "revision": 1,
+    "digest": "sha256:<64-hex-digits>"
+  },
+  "routing": {
+    "decision": "orchestrated",
+    "estimated_files": 6,
+    "estimated_tokens": 9000,
+    "multiple_information_boundaries": true,
+    "basis": "The goal crosses multiple information boundaries."
+  },
+  "discovery_authorization": {
+    "authorized": true,
+    "scout_model": "user-approved-scout-model",
+    "packet_count": 1,
+    "token_ceiling": 30000
+  },
   "assumptions": [],
   "budget": {
     "max_subagents": 3,
     "max_input_tokens_per_task": 12000,
-    "max_total_dispatched_tokens": 26000,
+    "max_total_dispatched_tokens": 30000,
     "max_accidental_overlap_ratio": 0.1,
     "max_shared_source_tokens_per_task": 1200
   },
@@ -97,7 +116,7 @@ Minimal shape:
 }
 ```
 
-`budget.max_input_tokens_per_task` constrains the initial dispatch estimate only; expansion allowances are excluded and the validator warns when the worst case (initial plus expansion) exceeds the cap. `max_total_dispatched_tokens` likewise excludes expansion allowances.
+`budget.max_input_tokens_per_task` constrains the initial dispatch estimate; the validator reports any task whose initial estimate plus requested allowance exceeds that per-task cap. `max_total_dispatched_tokens` is the authorization ceiling for the whole dispatch, including all declared expansion allowances. The plan's `discovery_authorization.token_ceiling` must equal that effective maximum.
 
 A complete plan has at least one task and one source unless every task operates only on dependency results.
 
@@ -130,7 +149,7 @@ A scout task definition in the plan:
 }
 ```
 
-Scout tasks use `deny` or `request` expansion only; `bounded` self-expansion is forbidden by the Context Routing reference.
+Scout tasks use `deny` or `request` expansion only. `request` requires explicit Planner approval before a new source is read.
 
 `build_task_packets.py` converts this into a standalone packet containing:
 
@@ -138,10 +157,14 @@ Scout tasks use `deny` or `request` expansion only; `bounded` self-expansion is 
 - Applicable shared facts, assumptions, and constraints.
 - Assigned source descriptors, not source bytes. A task may set `inherit_shared_sources` to `false` when it operates only on dependency results or does not need the shared raw sources.
 - Dependencies and a placeholder for compact dependency summaries.
-- Execution rules and the evidence-packet contract.
+- The explicit discovery authorization and execution rules.
+- The exact Evidence Packet schema reference and validation-authority name.
 - Estimated input metrics.
+- A manifest with the stable generator marker, plan id, exact packet paths, and packet SHA-256 digests.
 
 The Planner materializes source bytes after packet generation. It must not attach the complete parent transcript.
+
+`--overwrite` is accepted only when an existing manifest has that generator marker, matches the new plan id and exact packet paths, and authenticates every packet digest. Unrelated or same-named unauthenticated JSON causes a failure before any deletion.
 
 ## 5. Expansion request
 
@@ -168,7 +191,7 @@ The Planner should approve, narrow, replace, or deny the request. Approved sourc
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "packet_type": "subagent-result",
   "plan_id": "payment-timeout-investigation",
   "task_id": "task-db-scout",
@@ -192,6 +215,7 @@ The Planner should approve, narrow, replace, or deny the request. Approved sourc
   ],
   "facts_for_parent": [
     {
+      "id": "fact-db-pool-size",
       "statement": "The connection pool caps at 20 connections with a 30-second lease.",
       "provenance": ["src-db-pool"],
       "confidence": "confirmed"
@@ -204,7 +228,9 @@ The Planner should approve, narrow, replace, or deny the request. Approved sourc
 }
 ```
 
-Valid status values are `complete`, `partial`, and `blocked`. A `partial` or `blocked` result must explain what is missing. `metrics` (measured token usage) is optional; a scout that cannot measure usage reports the field as absent rather than inventing numbers.
+`assets/context-routing/evidence-packet.schema.json` and `scripts/validate_evidence_packet.py` are the checked schema and validation authority for this envelope. Required fields are exactly the fields shown above. Finding severity is `low`, `medium`, `high`, or `critical`; finding confidence is `low`, `medium`, or `high`. Valid status values are `complete`, `partial`, and `blocked`; a `partial` or `blocked` result must list missing information in `unknowns`. `metrics` is optional; a scout that cannot measure usage reports the field as absent rather than inventing numbers.
+
+Expansion requests are proposals only. Every entry in `expansions_used` must reference a request, identify a source locator and token cost, and set `planner_approved` to `true`. A task with `deny` expansion cannot return requests or used expansions. No result may use another expansion mode.
 
 An evidence packet must not contain private chain-of-thought. Findings, evidence, concise rationale, and uncertainty are sufficient.
 
@@ -215,6 +241,6 @@ Scouts do not produce a separate merge report. The Planner merges evidence packe
 ## 8. Compatibility rules
 
 - Additive fields are allowed; consumers must ignore unknown fields.
-- Increment `schema_version` for breaking field or semantic changes.
+- Increment `schema_version` for breaking field or semantic changes and update both schemas, validators, and packet envelopes in one logical change.
 - Preserve source IDs and task IDs across retries when the logical unit is unchanged.
 - Keep source content out of the plan and packet by default. Source bytes belong to the materialization step.

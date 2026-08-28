@@ -1,18 +1,21 @@
 ---
 task_id: "{{TASK_ID}}"
 revision: {{REVISION}}
-status: "APPROVED"
+status: "DRAFT"
 created_at: "{{ISO_8601_TIMESTAMP}}"
 supersedes: null
+workflow_revision: "0.6.1"
 protocol_version: "0.6"
-host_adapter: "{{VERIFIED_HOST_ADAPTER_ID}}"
-adapter_version: "{{VERIFIED_ADAPTER_VERSION}}"
-implementation_model: "{{USER_APPROVED_MODEL_OR_INHERIT_PARENT}}"
-reasoning_effort: "{{USER_APPROVED_EFFORT_OR_DEFAULT}}"
-approved_at: "{{ISO_8601_TIMESTAMP}}"
-approval_summary: "{{USER_APPROVAL_SUMMARY}}"
-repository_root: "{{ABSOLUTE_REPOSITORY_ROOT}}"
-baseline_revision: "{{GIT_REVISION_OR_NOT_APPLICABLE}}"
+protocol_sha256: null
+host_adapter: null
+adapter_version: null
+adapter_sha256: null
+implementation_model: null
+reasoning_effort: null
+approved_at: null
+approval_summary: null
+repository_root: null
+baseline_revision: null
 ---
 
 # Implementation Contract: {{TASK_TITLE}}
@@ -23,13 +26,17 @@ baseline_revision: "{{GIT_REVISION_OR_NOT_APPLICABLE}}"
 
 ## Discovery
 
-- Routing: `{{DIRECT_OR_ORCHESTRATED}}`
+- Routing: `direct`
 - Basis: {{FILES_AND_TOKEN_ESTIMATE_OR_OTHER_ROUTING_BASIS}}
-- Scout model: `{{MODEL_OR_NOT_APPLICABLE}}`
-- Discovery token spend: {{ESTIMATED_AND_MEASURED_TOKENS_OR_NOT_APPLICABLE}}
-- Evidence-locator index: {{LOCATOR_REFERENCES_OR_NOT_APPLICABLE}}
+- Scout model: `not-applicable`
+- Discovery authorization: `not-applicable` for this safe direct-lane draft
+- Authorized packet count: not-applicable
+- Authorized token ceiling: not-applicable
+- Discovery token spend: not-applicable
+- Dispatched: `no`
+- Evidence-locator index: not-applicable
 
-Requirements and acceptance criteria below reference surviving locators (`path:symbol`, `path:lines a-b`) from this index so the worker starts from precise coordinates. Use `direct` with a stated basis when no scouts ran; `orchestrated` requires the scout model and spend fields.
+Requirements and acceptance criteria below reference surviving stable locators (`path:symbol`, `path:section`, `path:object`, or `path:lines a-b` only when necessary) from this index so the worker starts from precise coordinates. Prefer source revision or content identity over ordinary line ranges when staleness matters. Use `direct` with a stated basis when no scouts ran; `orchestrated` requires explicit discovery authorization with the scout model, packet count, token ceiling, dispatch state, and spend fields. This template is a safe draft and must be populated and changed to `APPROVED` only after the approval gate. Before approval, replace the workflow/protocol/adapter revision placeholders and null digests with verified values from the exact loaded resources; an `APPROVED` contract may not retain placeholders or nulls.
 
 ## Requirements
 

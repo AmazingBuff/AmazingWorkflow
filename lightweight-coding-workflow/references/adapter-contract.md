@@ -44,7 +44,9 @@ Optional capability (protocol `0.6`, per the [Context Routing reference](context
 | --- | --- | --- |
 | `read_only_scout_dispatch` | `dispatch_scout` | Start read-only scout subagents with a validated (typically cheaper) model, pass each scout exactly its task packet and assigned source selectors, and relay evidence packets back without granting any write path. |
 
-An adapter without `read_only_scout_dispatch` remains fully valid: the Core restricts the Planner to the fast lane (direct inspection) on that host and the proposal records that restriction. The capability must never be implied by the presence of `worker_dispatch`; scouting is read-only Phase 1 discovery, dispatches its own role, and requires its own verified mapping.
+An adapter without `read_only_scout_dispatch` remains fully valid: the Core restricts the Planner to the fast lane (direct inspection) on that host and the proposal records that restriction. The capability must never be implied by the presence of `worker_dispatch`; scouting is read-only Phase 1 discovery, dispatches its own role, and requires its own verified mapping. This fast-lane restriction applies only when the adapter's protocol metadata exactly matches the Core. Older protocol or adapter metadata is incompatible and cannot be used as a fallback.
+
+When `read_only_scout_dispatch` is declared, its operation must reject a packet set unless the validated plan records `discovery_authorization.authorized: true`, the exact `scout_model`, the matching `packet_count`, and the matching `token_ceiling`. The adapter may narrow these limits but may not invent or broaden them.
 
 Each operation mapping states:
 
@@ -76,12 +78,12 @@ The Planner performs this read-only gate before requesting implementation approv
 2. Collect adapter references whose `host_id` exactly matches the identified host and whose claimed surface contains the active surface.
 3. Require exactly one matching adapter with `support_state: VERIFIED`.
 4. Require exact Core compatibility for `protocol_version` unless the adapter documents and has verified a compatibility range.
-5. Require a non-empty `adapter_version` and all nine capability ids exactly once.
+5. Require the exact validated `adapter_version` mapping and all nine capability ids exactly once; an older adapter version is not implicitly compatible.
 6. Read every operation mapping and confirm that its required host mechanism is available in the current task.
 7. Record `host_adapter` and `adapter_version` in the proposal and approved contract.
 8. Repeat capability, support-state, and version validation immediately before worker dispatch.
 
-Protocol `0.6` defines no implicit compatibility range for older adapter metadata. Historical approved contracts use their matching historical resources or are replaced by a newly approved revision. An `0.5` adapter presented to a `0.6` Core is not compatible as-is: it either gains a `0.6` metadata revision (optionally declaring `read_only_scout_dispatch`) or the task runs on the fast lane with an explicitly recorded restriction.
+Protocol `0.6` defines no implicit compatibility range for older adapter metadata. Historical approved contracts use their matching historical resources or are replaced by a newly approved revision. An adapter with `protocol_version` or `adapter_version` older than the Core's compatible metadata is rejected before approval; it does not enter the fast lane. A same-version adapter that lacks the optional `read_only_scout_dispatch` capability remains eligible for implementation writes and uses the fast lane with an explicitly recorded restriction.
 
 Selection is per task. Never merge two partial adapters, select an adapter by filename alone, promote an artifact through consent, or fall back to an ineligible state.
 
@@ -96,6 +98,8 @@ Return `CAPABILITY_UNAVAILABLE` and stop before approval or writes when:
 - protocol or adapter metadata is missing or incompatible;
 - any required capability or host mechanism is unavailable;
 - model validation or worker dispatch cannot be represented faithfully.
+
+An older adapter is an incompatibility failure, not a routing fallback. A same-version adapter without the optional Scout capability is the sole exception: it remains write-eligible and forces direct Planner discovery.
 
 The capability report names the host, candidate adapters, failed operation, and observed evidence. It must not dispatch a generic worker, borrow another host's mapping, or let the Planner implement as a fallback.
 

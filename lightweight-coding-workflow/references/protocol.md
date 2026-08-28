@@ -9,6 +9,7 @@ This document defines the host-neutral contract, state, worktree, single-writer,
 - One user-facing Planner owns requirements, approval, and final reporting.
 - One implementation worker owns product-code writes to a worktree.
 - The workflow has exactly two phases: planning and implementation. Read-only scouting is a Phase 1 activity, not a third phase or a second writer.
+- No Scout dispatch occurs before the Planner records explicit discovery authorization with the exact scout model, packet count, and token ceiling.
 - No product-code write occurs before contract and implementation-model approval.
 - Only a compatible adapter with `support_state: VERIFIED` may dispatch product-code writes. Scout dispatch is a separate, optional adapter capability and never authorizes writes.
 - An approved contract is the sole implementation authority and is never edited in place.
@@ -29,8 +30,11 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - `status` is `APPROVED` before dispatch.
 - `revision` is a positive integer.
 - `protocol_version` matches this Core protocol.
+- `workflow_revision` is the exact revision of the loaded workflow Skill.
+- `protocol_sha256` is a populated `sha256:<64-hex-digits>` digest of the exact Core protocol resource used for approval and dispatch.
 - `host_adapter` identifies the single selected compatible `VERIFIED` adapter.
 - `adapter_version` matches the adapter used for approval and dispatch.
+- `adapter_sha256` is a populated `sha256:<64-hex-digits>` digest of the exact selected adapter resource used for approval and dispatch.
 - Every requirement has a stable `R-<number>` id.
 - Every acceptance criterion has a stable `AC-<number>` id.
 - Every requirement maps to at least one acceptance criterion.
@@ -39,6 +43,8 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - Verification commands are real project commands, or the contract states why a check is manual.
 - `implementation_model` is the exact user-approved value. Parent inheritance is recorded only as `inherit-parent (user-approved)`.
 - The Discovery section records the routing decision (`direct` or `orchestrated`), its basis, the scout model when the orchestrated lane ran, estimated and measured discovery token spend, and the evidence-locator index used by requirements and acceptance criteria. Requirements and acceptance criteria should reference surviving locators (`path:symbol`, `path:lines a-b`) so the worker starts from precise coordinates.
+- An orchestrated Discovery section also records whether discovery was dispatched. Its authorization record must contain the exact scout model, packet count, and token ceiling; `dispatched: no` is required when no scheduler ran.
+- Stable symbols, sections, objects, and source content identity are preferred over ordinary line ranges. Use a line range only when necessary and pair it with a source revision or digest when staleness matters.
 - Applicable bundled coding-rule component documents are recorded one host-resolvable absolute path per entry, or the section records `None`; the worker loads every listed document before its first edit.
 - The Version control section records `git` or `none`. A Git-backed task also records the read-only baseline, one logical commit boundary, Changelog decision and proposed entry, proposed Conventional Commit message, commit authority, and separate push authority.
 - The Documentation section records Documentation Impact as `create`, `update`, or `not-required` with a canonical policy reason. For required maintenance it also records the canonical feature-document path, feature-index path, code and test entry points, required sections, and validation obligations; non-required fields use explicit safe not-applicable values.
@@ -46,6 +52,10 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - Open product or architecture questions make the contract ineligible for approval.
 
 The adapter owns the host-specific representation and validation of the approved model value. The Core defines no model catalog or fallback order.
+
+The Planner must not mark a contract `APPROVED` until the workflow revision, protocol digest, and adapter digest are populated and verified against the exact resources selected for that task.
+
+Workflow revision `0.6.1` adds mandatory contract evidence and progressive reference loading without changing Core protocol `0.6`. Contracts approved under workflow revision `0.6` remain immutable and continue with matching historical resources. New `0.6.1` contracts require `workflow_revision`, `protocol_sha256`, and `adapter_sha256` before approval or dispatch.
 
 ### Revision rules
 
@@ -63,6 +73,7 @@ Create a new revision when any of these changes:
 - implementation model, reasoning effort, host adapter, or adapter version;
 - the applicable coding-rules set;
 - the Discovery section's routing decision, basis, or scout model.
+- the workflow revision, protocol digest, or adapter digest evidence.
 
 Do not overwrite an approved contract. Mark an old revision `SUPERSEDED` only after its replacement is approved, and link the revisions through `supersedes`.
 
@@ -85,12 +96,17 @@ The Planner supplies the implementation worker with:
 - the absolute or host-resolvable location of this Core protocol;
 - task id and contract revision;
 - the adapter-validated implementation model and optional reasoning effort;
+- the verified workflow revision, protocol digest, and adapter digest recorded by the approved contract;
 - the absolute paths of every applicable coding-rule component document;
 - an instruction to treat the contract as the sole authority;
 - an instruction not to ask the user, expand scope, or create another writer;
 - an instruction to return exactly one result schema from this document.
 
 The selected adapter defines how that envelope is represented and dispatched.
+
+The adapter must reject dispatch when any required revision or digest field is missing, still a draft placeholder, or does not match the exact loaded workflow, Core protocol, or selected adapter resource. This check occurs after approval as well as before the worker starts.
+
+When an adapter provides read-only scouting, the Scout result is an Evidence Packet, not a Core implementation result. The packet shape is defined by `assets/context-routing/evidence-packet.schema.json` and validated by `scripts/validate_evidence_packet.py`; the generated task packet must carry both references so the response envelope cannot drift.
 
 ## Worktree ownership
 
@@ -289,4 +305,4 @@ The Planner may inspect the diff and rerun read-only checks, but may not edit pr
 
 ## Protocol 0.6 compatibility
 
-Protocol `0.6` adds Context Routing to `0.5`: a routing decision and optional read-only scout dispatch in Phase 1, the Discovery contract section, and the optional `read_only_scout_dispatch` adapter capability. The nine `0.5` capabilities are unchanged; adapters updated for `0.6` keep their `0.5` mappings and add the optional capability. Approved `0.5` contracts remain immutable: continue them with their matching historical Core and adapter resources, or create and approve a new `0.6` revision. Do not pair a `0.6` Core with `0.5` adapter metadata through an implicit compatibility range; an `0.5` adapter without the optional capability simply restricts the Planner to the fast lane.
+Protocol `0.6` adds Context Routing to `0.5`: a routing decision and optional read-only scout dispatch in Phase 1, the Discovery contract section, and the optional `read_only_scout_dispatch` adapter capability. The nine `0.5` capabilities are unchanged; adapters updated for `0.6` keep their `0.5` mappings and may add the optional capability. Approved `0.5` contracts remain immutable: continue them with their matching historical Core and adapter resources, or create and approve a new `0.6` revision. Do not pair a `0.6` Core with older adapter metadata through an implicit compatibility range. An exact same-version adapter without the optional capability remains eligible for implementation and restricts the Planner to the fast lane; older metadata is incompatible and is rejected before approval.

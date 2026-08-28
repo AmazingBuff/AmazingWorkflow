@@ -11,7 +11,20 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from validate_plan import facts_for_sources, load_plan, validate_plan
+from validate_evidence_packet import (
+    EVIDENCE_PACKET_FINDING_FIELDS,
+    EVIDENCE_PACKET_REQUIRED_FIELDS,
+    EVIDENCE_PACKET_TOP_LEVEL_OPTIONAL_FIELDS,
+)
+from validate_plan import (
+    SUPPORTED_SCHEMA_VERSION,
+    facts_for_sources,
+    load_plan,
+    sha256_file,
+    validate_plan,
+)
+
+GENERATOR_MARKER = "lightweight-coding-workflow.build_task_packets/v1"
 
 
 def topological_layers(tasks: list[dict[str, Any]]) -> list[list[str]]:
@@ -38,7 +51,104 @@ def topological_layers(tasks: list[dict[str, Any]]) -> list[list[str]]:
     return layers
 
 
-def prepare_output_directory(path: Path, overwrite: bool) -> None:
+def _authenticated_manifest_entries(
+    path: Path, plan_id: str, generated_names: set[str]
+) -> list[Path]:
+    manifest_path = path / "manifest.json"
+    if not manifest_path.is_file():
+        raise ValueError(
+            "refusing --overwrite: existing output has no generated manifest"
+        )
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"refusing --overwrite: generated manifest is unreadable: {manifest_path}"
+        ) from exc
+    if not isinstance(manifest, dict):
+        raise TypeError("refusing --overwrite: generated manifest must be an object")
+    if manifest.get("generator_marker") != GENERATOR_MARKER:
+        raise ValueError(
+            "refusing --overwrite: manifest does not contain the stable generator marker"
+        )
+    if manifest.get("plan_id") != plan_id:
+        raise ValueError(
+            "refusing --overwrite: manifest plan_id does not match the new plan"
+        )
+
+    expected_packet_names = sorted(generated_names - {"manifest.json"})
+    packet_paths = manifest.get("packet_paths")
+    if packet_paths != expected_packet_names:
+        raise ValueError(
+            "refusing --overwrite: manifest packet paths do not exactly match the new plan"
+        )
+    if any(
+        not isinstance(packet_path, str)
+        or Path(packet_path).name != packet_path
+        or packet_path == "manifest.json"
+        for packet_path in packet_paths
+    ):
+        raise ValueError(
+            "refusing --overwrite: manifest contains an unsafe packet path"
+        )
+
+    packets = manifest.get("packets")
+    if not isinstance(packets, list):
+        raise TypeError("refusing --overwrite: manifest packets must be an array")
+    packet_entries: dict[str, dict[str, Any]] = {}
+    for packet in packets:
+        if not isinstance(packet, dict):
+            raise TypeError(
+                "refusing --overwrite: manifest packet entries must be objects"
+            )
+        packet_path = packet.get("path")
+        packet_digest = packet.get("sha256")
+        if (
+            not isinstance(packet_path, str)
+            or packet_path in packet_entries
+            or not isinstance(packet_digest, str)
+            or not packet_digest.startswith("sha256:")
+            or len(packet_digest) != len("sha256:") + 64
+        ):
+            raise ValueError(
+                "refusing --overwrite: manifest packet entries lack unique path digests"
+            )
+        if packet_path not in expected_packet_names:
+            raise ValueError(
+                "refusing --overwrite: manifest packet paths do not exactly match the new plan"
+            )
+        packet_entries[packet_path] = packet
+    if sorted(packet_entries) != expected_packet_names:
+        raise ValueError(
+            "refusing --overwrite: manifest packet entries do not exactly match the new plan"
+        )
+
+    entries = sorted(path.iterdir(), key=lambda entry: entry.name)
+    authenticated_names = {"manifest.json", *expected_packet_names}
+    if {entry.name for entry in entries} != authenticated_names:
+        raise ValueError(
+            "refusing --overwrite: output contains files not authenticated by its manifest"
+        )
+    authenticated_entries = [manifest_path]
+    for packet_path in expected_packet_names:
+        packet_file = path / packet_path
+        if not packet_file.is_file():
+            raise ValueError(
+                f"refusing --overwrite: authenticated packet is missing: {packet_file}"
+            )
+        expected_digest = packet_entries[packet_path]["sha256"]
+        actual_digest = f"sha256:{sha256_file(packet_file)}"
+        if actual_digest != expected_digest:
+            raise ValueError(
+                f"refusing --overwrite: authenticated packet digest mismatch: {packet_file}"
+            )
+        authenticated_entries.append(packet_file)
+    return authenticated_entries
+
+
+def prepare_output_directory(
+    path: Path, overwrite: bool, plan_id: str, generated_names: set[str]
+) -> None:
     if path.exists() and not path.is_dir():
         raise ValueError(f"output path exists and is not a directory: {path}")
     if path.exists() and any(path.iterdir()):
@@ -46,13 +156,11 @@ def prepare_output_directory(path: Path, overwrite: bool) -> None:
             raise ValueError(
                 f"output directory is not empty: {path}; pass --overwrite to replace it"
             )
-        for entry in path.iterdir():
-            if entry.name == "manifest.json" or entry.suffix == ".json":
-                entry.unlink()
-            else:
-                raise ValueError(
-                    f"refusing --overwrite: directory contains a non-generated file: {entry}"
-                )
+        authenticated_entries = _authenticated_manifest_entries(
+            path, plan_id, generated_names
+        )
+        for entry in authenticated_entries:
+            entry.unlink()
     path.mkdir(parents=True, exist_ok=True)
 
 
@@ -95,6 +203,9 @@ def build_packet(
         "packet_type": "subagent-task",
         "plan_id": plan["plan_id"],
         "task_id": task["id"],
+        "configuration": plan["configuration"],
+        "routing": plan["routing"],
+        "discovery_authorization": plan["discovery_authorization"],
         "parent_goal": plan["goal"],
         "mode": plan["mode"],
         "agent_role": task["agent_role"],
@@ -119,39 +230,22 @@ def build_packet(
             "Read only assigned sources initially.",
             "Do not request or assume access to the full parent transcript.",
             "Treat shared summaries as context, not primary evidence, when original sources are assigned.",
-            "Use the declared expansion policy for missing information.",
+            "Use only the declared deny-or-request expansion policy for missing information.",
+            "A request-mode expansion requires explicit Planner approval before reading the requested source.",
             "Return conclusions, evidence, uncertainty, and reusable facts; do not return private chain-of-thought.",
             "Preserve source IDs and precise locators in every material finding.",
         ],
         "response_contract": {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
             "packet_type": "subagent-result",
-            "required_fields": [
-                "schema_version",
-                "packet_type",
-                "plan_id",
-                "task_id",
-                "status",
-                "summary",
-                "findings",
-                "facts_for_parent",
-                "assumptions",
-                "unknowns",
-                "expansion_requests",
-                "expansions_used",
-            ],
-            "optional_fields": [
-                "metrics"
-            ],
+            "schema_ref": "assets/context-routing/evidence-packet.schema.json",
+            "validation_authority": "scripts/validate_evidence_packet.py",
+            "required_fields": EVIDENCE_PACKET_REQUIRED_FIELDS,
+            "optional_fields": EVIDENCE_PACKET_TOP_LEVEL_OPTIONAL_FIELDS,
             "status_values": ["complete", "partial", "blocked"],
-            "finding_fields": [
-                "id",
-                "claim",
-                "severity",
-                "confidence",
-                "evidence",
-                "recommendation",
-            ],
+            "finding_fields": EVIDENCE_PACKET_FINDING_FIELDS,
             "evidence_fields": ["source_id", "locator", "note"],
+            "expansion_modes": ["deny", "request"],
         },
         "estimated_input": task_metrics,
     }
@@ -167,9 +261,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="output directory, default: task-packets",
     )
     parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="effective routing configuration (default: package default-config.yaml)",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="replace a non-empty output directory",
+        help="replace only packet files authenticated by a matching generated manifest",
     )
     return parser.parse_args(argv)
 
@@ -188,11 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     configure_output_streams()
     try:
         plan = load_plan(args.plan)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    report = validate_plan(plan)
+    report = validate_plan(plan, args.config)
     if not report["valid"]:
         print("plan validation failed:", file=sys.stderr)
         for error in report["errors"]:
@@ -200,9 +300,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        prepare_output_directory(args.out, args.overwrite)
         layers = topological_layers(plan["tasks"])
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    generated_names = {"manifest.json"}
+    generated_names.update(f"{task['id']}.json" for task in plan["tasks"])
+    try:
+        prepare_output_directory(
+            args.out, args.overwrite, plan["plan_id"], generated_names
+        )
+    except (TypeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
@@ -227,6 +336,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "task_id": task_id,
                 "path": filename,
+                "sha256": f"sha256:{sha256_file(packet_path)}",
                 "dependencies": task.get("dependencies", []),
                 "estimated_input_tokens": report["metrics"]["per_task"][task_id][
                     "estimated_input_tokens"
@@ -237,8 +347,11 @@ def main(argv: list[str] | None = None) -> int:
     manifest = {
         "schema_version": plan["schema_version"],
         "packet_type": "task-packet-manifest",
+        "generator_marker": GENERATOR_MARKER,
         "plan_id": plan["plan_id"],
         "mode": plan["mode"],
+        "discovery_authorization": plan["discovery_authorization"],
+        "packet_paths": sorted(entry["path"] for entry in packet_entries),
         "dispatch_layers": layers,
         "packets": packet_entries,
         "plan_metrics": report["metrics"],

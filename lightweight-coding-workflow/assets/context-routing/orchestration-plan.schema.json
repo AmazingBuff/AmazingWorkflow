@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/lightweight-coding-workflow/orchestration-plan.schema.json",
+  "$id": "urn:lightweight-coding-workflow:orchestration-plan-schema:1.1",
   "title": "Scout Orchestration Plan",
   "type": "object",
   "additionalProperties": true,
@@ -9,6 +9,9 @@
     "plan_id",
     "goal",
     "mode",
+    "configuration",
+    "routing",
+    "discovery_authorization",
     "budget",
     "shared_context",
     "sources",
@@ -17,8 +20,7 @@
   ],
   "properties": {
     "schema_version": {
-      "type": "string",
-      "minLength": 1
+      "const": "1.1"
     },
     "plan_id": {
       "$ref": "#/$defs/identifier"
@@ -34,6 +36,15 @@
         "independent-review",
         "high-assurance"
       ]
+    },
+    "configuration": {
+      "$ref": "#/$defs/configuration"
+    },
+    "routing": {
+      "$ref": "#/$defs/routing"
+    },
+    "discovery_authorization": {
+      "$ref": "#/$defs/discoveryAuthorization"
     },
     "assumptions": {
       "type": "array",
@@ -109,6 +120,91 @@
         "max_shared_source_tokens_per_task": {
           "type": "integer",
           "minimum": 0
+        }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "source",
+        "revision",
+        "digest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-fA-F]{64}$"
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "decision",
+        "estimated_files",
+        "estimated_tokens",
+        "multiple_information_boundaries",
+        "basis"
+      ],
+      "properties": {
+        "decision": {
+          "const": "orchestrated"
+        },
+        "estimated_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "multiple_information_boundaries": {
+          "type": "boolean"
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "discoveryAuthorization": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "authorized",
+        "scout_model",
+        "packet_count",
+        "token_ceiling"
+      ],
+      "properties": {
+        "authorized": {
+          "const": true
+        },
+        "scout_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packet_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "token_ceiling": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
@@ -347,8 +443,7 @@
         "mode": {
           "enum": [
             "deny",
-            "request",
-            "bounded"
+            "request"
           ]
         },
         "max_additional_tokens": {

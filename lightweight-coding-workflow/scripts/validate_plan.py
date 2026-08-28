@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
-"""Validate a context-efficient multi-agent orchestration plan.
+"""Validate a context-routing scout orchestration plan.
 
-The validator uses only the Python standard library. It checks structure,
-source references, dependency cycles, token budgets, and accidental source
-overlap. Token estimates are planning approximations, not billing truth; the
-estimator weights CJK characters near one token per character and other text
-near four characters per token.
+The validator uses only the Python standard library. It checks the effective
+configuration digest, explicit discovery authorization, structure, source
+references, dependency cycles, token budgets, expansion policy, and accidental
+source overlap. Token estimates are planning approximations, not billing
+truth; the estimator weights CJK characters near one token per character and
+other text near four characters per token.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
+SUPPORTED_SCHEMA_VERSION = "1.1"
+DEFAULT_CONFIG_RELATIVE_PATH = Path("assets/context-routing/default-config.yaml")
 VALID_MODES = {"lean", "balanced", "independent-review", "high-assurance"}
 VALID_CONFIDENCE = {"confirmed", "inferred", "unverified"}
-VALID_EXPANSION_MODES = {"deny", "request", "bounded"}
+VALID_EXPANSION_MODES = {"deny", "request"}
 VALID_SELECTOR_TYPES = {
     "lines",
     "pages",
@@ -55,6 +60,136 @@ REQUIRED_BUDGET_FIELDS = {
     "max_accidental_overlap_ratio",
     "max_shared_source_tokens_per_task",
 }
+REQUIRED_TOP_LEVEL_FIELDS = {
+    "schema_version",
+    "plan_id",
+    "goal",
+    "mode",
+    "configuration",
+    "routing",
+    "discovery_authorization",
+    "budget",
+    "shared_context",
+    "sources",
+    "tasks",
+    "merge",
+}
+
+
+def _strip_yaml_comment(value: str) -> str:
+    """Remove an unquoted YAML comment from a scalar value."""
+    quoted = False
+    escaped = False
+    for index, character in enumerate(value):
+        if character == '"' and not escaped:
+            quoted = not quoted
+        if character == "#" and not quoted and (
+            index == 0 or value[index - 1].isspace()
+        ):
+            return value[:index].rstrip()
+        escaped = character == "\\" and not escaped
+        if character != "\\":
+            escaped = False
+    return value.strip()
+
+
+def _parse_yaml_scalar(value: str, path: Path, line_number: int) -> Any:
+    value = _strip_yaml_comment(value)
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        if value.startswith("'") and value.endswith("'"):
+            return value[1:-1].replace("''", "'")
+        return value
+    if isinstance(parsed, (dict, list, str, int, float, bool)) or parsed is None:
+        return parsed
+    raise ValueError(f"unsupported YAML scalar at {path}:{line_number}")
+
+
+def load_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Load the package's small JSON-compatible YAML configuration subset.
+
+    The default configuration intentionally uses mappings, scalar values, and
+    inline JSON lists only. Keeping this parser local makes validation
+    deterministic without introducing a runtime YAML dependency.
+    """
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(f"unable to read configuration: {path}: {exc}") from exc
+
+    root: dict[str, Any] = {}
+    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
+    for line_number, raw_line in enumerate(lines, start=1):
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        if raw_line.startswith("\t"):
+            raise ValueError(f"tabs are not supported in configuration at {path}:{line_number}")
+        indentation = len(raw_line) - len(raw_line.lstrip(" "))
+        content = raw_line.strip()
+        if ":" not in content:
+            raise ValueError(f"expected a mapping at {path}:{line_number}")
+        key, raw_value = content.split(":", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"empty configuration key at {path}:{line_number}")
+
+        while stack[-1][0] >= indentation:
+            stack.pop()
+        parent = stack[-1][1]
+        if key in parent:
+            raise ValueError(f"duplicate configuration key at {path}:{line_number}: {key}")
+        value = _parse_yaml_scalar(raw_value, path, line_number)
+        parent[key] = value
+        if value == {} and not raw_value.strip():
+            child: dict[str, Any] = {}
+            parent[key] = child
+            stack.append((indentation, child))
+    return root
+
+
+def default_config_path() -> Path:
+    return Path(__file__).resolve().parents[1] / DEFAULT_CONFIG_RELATIVE_PATH
+
+
+def load_effective_config(path: Path | None = None) -> dict[str, Any]:
+    """Load the one effective routing and budget configuration source."""
+    config_path = path or default_config_path()
+    config = load_yaml_mapping(config_path)
+    if not isinstance(config, dict):
+        raise TypeError(f"configuration root must be an object: {config_path}")
+    required = {
+        "schema_version",
+        "config_id",
+        "config_revision",
+        "routing_gate",
+        "mode_profiles",
+        "scout_policy",
+    }
+    missing = sorted(required - set(config))
+    if missing:
+        raise ValueError(
+            f"configuration is missing fields: {', '.join(missing)}: {config_path}"
+        )
+    if config.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
+        raise ValueError(
+            f"configuration schema_version must be {SUPPORTED_SCHEMA_VERSION!r}: {config_path}"
+        )
+    return config
+
+
+def sha256_file(path: Path) -> str:
+    """Return a stable SHA-256 digest for a UTF-8 or binary package file."""
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise ValueError(f"unable to hash file: {path}: {exc}") from exc
+    return digest.hexdigest()
 
 
 def load_plan(path: Path) -> dict[str, Any]:
@@ -67,7 +202,7 @@ def load_plan(path: Path) -> dict[str, Any]:
             f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}"
         ) from exc
     if not isinstance(data, dict):
-        raise ValueError("plan root must be a JSON object")
+        raise TypeError("plan root must be a JSON object")
     return data
 
 
@@ -191,27 +326,20 @@ def facts_for_sources(facts: Iterable[dict[str, Any]], source_ids: set[str]) -> 
     return selected
 
 
-def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+def validate_plan(
+    plan: dict[str, Any], config_path: Path | None = None
+) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
 
-    required_top_level = {
-        "schema_version",
-        "plan_id",
-        "goal",
-        "mode",
-        "budget",
-        "shared_context",
-        "sources",
-        "tasks",
-        "merge",
-    }
-    missing = sorted(required_top_level - set(plan))
+    missing = sorted(REQUIRED_TOP_LEVEL_FIELDS - set(plan))
     if missing:
         errors.append(f"missing required top-level fields: {', '.join(missing)}")
 
-    if not is_non_empty_string(plan.get("schema_version")):
-        errors.append("schema_version must be a non-empty string")
+    if plan.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
+        errors.append(
+            f"schema_version must be exactly {SUPPORTED_SCHEMA_VERSION!r}"
+        )
     if not valid_id(plan.get("plan_id")):
         errors.append(
             "plan_id must start with an alphanumeric character and contain only letters, digits, '.', '_' or '-'"
@@ -221,6 +349,107 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     mode = plan.get("mode")
     if mode not in VALID_MODES:
         errors.append(f"mode must be one of {sorted(VALID_MODES)}, got {mode!r}")
+
+    effective_config: dict[str, Any] = {}
+    resolved_config_path = config_path or default_config_path()
+    try:
+        effective_config = load_effective_config(resolved_config_path)
+    except ValueError as exc:
+        errors.append(str(exc))
+
+    configuration = plan.get("configuration")
+    if not isinstance(configuration, dict):
+        errors.append("configuration must be an object")
+        configuration = {}
+    configuration_source = configuration.get("source")
+    if not is_non_empty_string(configuration_source):
+        errors.append("configuration.source must be a non-empty string")
+    elif config_path is None and configuration_source.replace("\\", "/") != DEFAULT_CONFIG_RELATIVE_PATH.as_posix():
+        errors.append(
+            "configuration.source must identify assets/context-routing/default-config.yaml"
+        )
+    configuration_id = configuration.get("id")
+    if not valid_id(configuration_id):
+        errors.append("configuration.id has an invalid identifier")
+    configuration_revision = configuration.get("revision")
+    if (
+        not isinstance(configuration_revision, int)
+        or isinstance(configuration_revision, bool)
+        or configuration_revision < 1
+    ):
+        errors.append("configuration.revision must be an integer >= 1")
+    configuration_digest = configuration.get("digest")
+    if not is_non_empty_string(configuration_digest):
+        errors.append("configuration.digest must be a non-empty string")
+    elif not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", configuration_digest):
+        errors.append("configuration.digest must use the sha256:<64-hex-digits> format")
+    elif resolved_config_path.is_file():
+        try:
+            expected_digest = f"sha256:{sha256_file(resolved_config_path)}"
+        except ValueError as exc:
+            errors.append(str(exc))
+        else:
+            if configuration_digest != expected_digest:
+                errors.append(
+                    "configuration.digest does not match the effective configuration source"
+                )
+
+    if effective_config:
+        if configuration.get("revision") != effective_config.get("config_revision"):
+            errors.append(
+                "configuration.revision does not match the effective configuration source"
+            )
+        if not valid_id(effective_config.get("config_id")):
+            errors.append("effective configuration config_id is invalid")
+        elif configuration.get("id") != effective_config.get("config_id"):
+            errors.append(
+                "configuration.id does not match the effective configuration source"
+            )
+
+    routing = plan.get("routing")
+    if not isinstance(routing, dict):
+        errors.append("routing must be an object")
+        routing = {}
+    routing_decision = routing.get("decision")
+    if routing_decision != "orchestrated":
+        errors.append("routing.decision must be 'orchestrated' for a scout plan")
+    estimated_files = routing.get("estimated_files")
+    if (
+        not isinstance(estimated_files, int)
+        or isinstance(estimated_files, bool)
+        or estimated_files < 0
+    ):
+        errors.append("routing.estimated_files must be an integer >= 0")
+    estimated_tokens = routing.get("estimated_tokens")
+    if (
+        not isinstance(estimated_tokens, int)
+        or isinstance(estimated_tokens, bool)
+        or estimated_tokens < 0
+    ):
+        errors.append("routing.estimated_tokens must be an integer >= 0")
+    if not isinstance(routing.get("multiple_information_boundaries"), bool):
+        errors.append("routing.multiple_information_boundaries must be a boolean")
+    if not is_non_empty_string(routing.get("basis")):
+        errors.append("routing.basis must be a non-empty string")
+    routing_gate = effective_config.get("routing_gate", {})
+    if isinstance(routing_gate, dict):
+        max_files_direct = routing_gate.get("max_files_direct")
+        max_tokens_direct = routing_gate.get("max_estimated_tokens_direct")
+        if (
+            isinstance(estimated_files, int)
+            and isinstance(max_files_direct, int)
+            and isinstance(estimated_tokens, int)
+            and isinstance(max_tokens_direct, int)
+        ):
+            should_orchestrate = (
+                estimated_files > max_files_direct
+                or estimated_tokens > max_tokens_direct
+                or routing.get("multiple_information_boundaries") is True
+            )
+            if not should_orchestrate:
+                errors.append(
+                    "routing.decision is orchestrated but the effective routing gate selects the fast lane"
+                )
 
     assumptions = plan.get("assumptions", [])
     assumptions_list = validate_string_list(assumptions, "assumptions", errors)
@@ -253,6 +482,17 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         errors.append("budget.max_accidental_overlap_ratio must be a number from 0 to 1")
     elif not 0 <= float(overlap_limit) <= 1:
         errors.append("budget.max_accidental_overlap_ratio must be between 0 and 1")
+
+    mode_profiles = effective_config.get("mode_profiles", {})
+    effective_profile = (
+        mode_profiles.get(mode) if isinstance(mode_profiles, dict) else None
+    )
+    if isinstance(effective_profile, dict) and mode in VALID_MODES:
+        for field in REQUIRED_BUDGET_FIELDS:
+            if budget.get(field) != effective_profile.get(field):
+                errors.append(
+                    f"budget.{field} must match the effective {mode!r} configuration profile"
+                )
 
     shared_context = plan.get("shared_context")
     if not isinstance(shared_context, dict):
@@ -450,7 +690,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 warnings.append(
                     f"task {task_id} uses expansion mode 'deny' but has a non-zero expansion budget"
                 )
-            elif expansion_mode in {"request", "bounded"} and additional == 0:
+            elif expansion_mode == "request" and additional == 0:
                 warnings.append(
                     f"task {task_id} permits expansion but has a zero expansion budget"
                 )
@@ -477,6 +717,54 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     cycle = detect_dependency_cycle(task_dependencies)
     if cycle:
         errors.append(f"task dependency cycle detected: {' -> '.join(cycle)}")
+
+    discovery_authorization = plan.get("discovery_authorization")
+    if not isinstance(discovery_authorization, dict):
+        errors.append("discovery_authorization must be an object")
+        discovery_authorization = {}
+    if discovery_authorization.get("authorized") is not True:
+        errors.append("discovery_authorization.authorized must be true")
+    scout_model = discovery_authorization.get("scout_model")
+    if not is_non_empty_string(scout_model):
+        errors.append("discovery_authorization.scout_model must be a non-empty string")
+    packet_count = discovery_authorization.get("packet_count")
+    if (
+        not isinstance(packet_count, int)
+        or isinstance(packet_count, bool)
+        or packet_count < 1
+    ):
+        errors.append("discovery_authorization.packet_count must be an integer >= 1")
+    elif packet_count != len(tasks_value):
+        errors.append(
+            "discovery_authorization.packet_count must equal the number of scout tasks"
+        )
+    token_ceiling = discovery_authorization.get("token_ceiling")
+    if (
+        not isinstance(token_ceiling, int)
+        or isinstance(token_ceiling, bool)
+        or token_ceiling < 1
+    ):
+        errors.append("discovery_authorization.token_ceiling must be an integer >= 1")
+    elif isinstance(budget.get("max_total_dispatched_tokens"), int) and (
+        token_ceiling != budget["max_total_dispatched_tokens"]
+    ):
+        errors.append(
+            "discovery_authorization.token_ceiling must equal budget.max_total_dispatched_tokens"
+        )
+
+    scout_policy = effective_config.get("scout_policy", {})
+    if isinstance(scout_policy, dict):
+        configured_modes = scout_policy.get("allowed_expansion_modes")
+        if configured_modes != sorted(VALID_EXPANSION_MODES):
+            errors.append(
+                "effective scout policy expansion modes do not match the validator"
+            )
+        if scout_policy.get("sandbox_mode") != "read-only":
+            errors.append("effective scout policy must require a read-only sandbox")
+        if scout_policy.get("planner_approval_required_for_request") is not True:
+            errors.append(
+                "effective scout policy must require Planner approval for request expansion"
+            )
 
     merge = plan.get("merge")
     if not isinstance(merge, dict):
@@ -580,6 +868,10 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         if total_dispatched_source_tokens
         else 0.0
     )
+    total_expansion_allowance = sum(worst_case_expansion.values())
+    worst_case_total_input_tokens = (
+        total_estimated_input_tokens + total_expansion_allowance
+    )
 
     if isinstance(budget.get("max_subagents"), int) and len(tasks) > budget["max_subagents"]:
         errors.append(
@@ -603,9 +895,19 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 )
 
     max_total = budget.get("max_total_dispatched_tokens")
-    if isinstance(max_total, int) and total_estimated_input_tokens > max_total:
+    if isinstance(max_total, int) and worst_case_total_input_tokens > max_total:
         errors.append(
-            f"estimated total dispatched input {total_estimated_input_tokens} exceeds budget {max_total}"
+            f"worst-case total dispatched input {worst_case_total_input_tokens} "
+            f"(including expansion allowances) exceeds budget {max_total}"
+        )
+    if (
+        isinstance(token_ceiling, int)
+        and not isinstance(token_ceiling, bool)
+        and worst_case_total_input_tokens > token_ceiling
+    ):
+        errors.append(
+            "discovery_authorization.token_ceiling is below the worst-case "
+            "dispatched input including expansion allowances"
         )
 
     if isinstance(shared_limit, int) and shared_source_tokens > shared_limit:
@@ -632,11 +934,12 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         if readers > 1 and source_id not in shared_source_set
     }
     for task_id, task in tasks.items():
-        if task.get("intentional_overlap") is True:
-            if not overlap_sources.intersection(task_source_ids.get(task_id, [])):
-                warnings.append(
-                    f"task {task_id} is marked intentional_overlap but shares no non-shared source with another task"
-                )
+        if task.get("intentional_overlap") is True and not overlap_sources.intersection(
+            task_source_ids.get(task_id, [])
+        ):
+            warnings.append(
+                f"task {task_id} is marked intentional_overlap but shares no non-shared source with another task"
+            )
 
     metrics = {
         "task_count": len(tasks),
@@ -648,6 +951,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "accidental_duplicate_source_tokens": accidental_duplicate_source_tokens,
         "accidental_overlap_ratio": round(accidental_overlap_ratio, 6),
         "estimated_total_input_tokens": total_estimated_input_tokens,
+        "total_expansion_allowance": total_expansion_allowance,
+        "worst_case_total_input_tokens": worst_case_total_input_tokens,
         "per_task": task_metrics,
     }
 
@@ -682,6 +987,11 @@ def print_human_report(report: dict[str, Any]) -> None:
         f"{metrics['estimated_total_input_tokens']}"
     )
     print(
+        "  Worst-case total input tokens: "
+        f"{metrics['worst_case_total_input_tokens']} "
+        f"({metrics['total_expansion_allowance']} expansion allowance)"
+    )
+    print(
         "  Raw overlap ratio: "
         f"{metrics['raw_overlap_ratio']:.3f} "
         f"({metrics['raw_duplicate_source_tokens']} duplicate source tokens)"
@@ -702,6 +1012,12 @@ def print_human_report(report: dict[str, Any]) -> None:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("plan", type=Path, help="path to orchestration-plan.json")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="effective routing configuration (default: package default-config.yaml)",
+    )
     parser.add_argument(
         "--json",
         action="store_true",
@@ -725,7 +1041,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_output_streams()
     try:
         plan = load_plan(args.plan)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         report = {"valid": False, "errors": [str(exc)], "warnings": [], "metrics": {}}
         if args.json:
             print(json.dumps(report, indent=2, ensure_ascii=False))
@@ -733,7 +1049,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Plan status: INVALID\n\nErrors:\n  - {exc}")
         return 2
 
-    report = validate_plan(plan)
+    report = validate_plan(plan, args.config)
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
