@@ -46,7 +46,7 @@ This adapter is the sole `VERIFIED` protocol `0.6` mapping. It implements the [H
 
 Protocol `0.6` requires exact adapter metadata. Older approved contracts remain immutable and continue only with matching historical resources or a newly approved revision.
 
-Workflow revision compatibility: contracts approved under `0.6` remain immutable and use matching historical Skill, Core, and adapter resources. New `0.6.1` contracts must carry verified workflow revision, protocol SHA-256, and adapter SHA-256 evidence; Codex adapter version remains `0.6`.
+Workflow revision compatibility: contracts approved under `0.6` remain immutable and use matching historical Skill, Core, and adapter resources. Existing approved `0.6.1` contracts may continue with matching historical `0.6.1` resources; reapproval is required only to run a task under workflow revision `0.6.2` and its canonical UTF-8/LF text-digest semantics. New `0.6.2` contracts must carry verified workflow revision, protocol SHA-256, and adapter SHA-256 evidence; Codex adapter version remains `0.6`. Text-resource evidence uses the canonical UTF-8/LF digest representation documented by the Core; binary and generated packet artifacts retain raw-byte hashing.
 
 ## Operation map
 

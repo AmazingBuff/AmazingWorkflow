@@ -116,7 +116,7 @@ Minimal shape:
 }
 ```
 
-`budget.max_input_tokens_per_task` constrains the initial dispatch estimate; the validator reports any task whose initial estimate plus requested allowance exceeds that per-task cap. `max_total_dispatched_tokens` is the authorization ceiling for the whole dispatch, including all declared expansion allowances. The plan's `discovery_authorization.token_ceiling` must equal that effective maximum.
+`budget.max_input_tokens_per_task` constrains the initial dispatch estimate; the validator reports any task whose initial estimate plus requested allowance exceeds that per-task cap. Mode-profile budget values are maximum limits, so a plan may select lower values. `max_total_dispatched_tokens` is the selected maximum for the whole dispatch, including all declared expansion allowances. The actual approved `discovery_authorization.token_ceiling` must satisfy `worst_case_total_input_tokens <= token_ceiling <= max_total_dispatched_tokens`.
 
 A complete plan has at least one task and one source unless every task operates only on dependency results.
 

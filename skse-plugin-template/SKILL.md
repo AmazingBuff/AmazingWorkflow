@@ -1,6 +1,6 @@
 ---
 name: skse-plugin-template
-description: Scaffold or maintain a canonical-rule-compliant C++23 Skyrim SKSE plugin for SE, AE, and VR with alandtse/CommonLibSSE-NG branch ng, project namespaces, CMake 3.25 Debug/Release presets, optional config/hotkey/Present/vtable/event modules, GPL-3.0-or-later output, and direct use of the sibling lightweight-coding-workflow skill's coding-rule authority. Use only when the lightweight-coding-workflow skill is installed and discoverable; when it is absent, this skill does not apply - report that the required rule authority is missing instead of proceeding without it.
+description: Use only when the active host Skill catalog reports lightweight-coding-workflow enabled and discoverable; requires its canonical rules to scaffold or maintain a C++23 Skyrim SKSE plugin for SE, AE, or VR.
 ---
 
 # SKSE Plugin Template
@@ -9,15 +9,15 @@ This Skill generates one CommonLibSSE-NG plugin project. It is not
 standalone: it requires the `lightweight-coding-workflow` skill's coding-rule
 authority.
 
-**Presence gate**: before doing anything else, locate the
-`lightweight-coding-workflow` skill through the host's skill-discovery
-mechanism (loaded skill metadata, the skill catalog, or an installed skills
-directory such as `<project>/.zcode/skills/`, `<project>/.agents/skills/`,
-`~/.zcode/skills/`, or `~/.agents/skills/`). Do not assume a relative
-sibling path and do not proceed by guessing. If the skill is not installed
-and discoverable, stop and report that the required coding-rule authority is
-missing; do not scaffold with a local rule copy, fallback, or synthesized
-rules.
+**Presence gate**: before doing anything else, ask the active host Skill
+catalog whether `lightweight-coding-workflow` is enabled and discoverable. If
+catalog metadata is unavailable, inspect loaded Skill metadata, then host-native
+roots including `$CODEX_HOME/skills/`, `~/.codex/skills/`, `~/.zcode/skills/`,
+`~/.agents/skills/`, `<project>/.zcode/skills/`, and
+`<project>/.agents/skills/`. Filesystem presence alone is insufficient: require
+both enabled and discoverable status. If that status is unavailable, stop and
+report that the required coding-rule authority is missing; do not scaffold with
+a local rule copy, fallback, or synthesized rules.
 
 Once located, use the canonical rule documents **within that skill's
 directory**:

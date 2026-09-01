@@ -14,6 +14,8 @@ routing_gate:
   max_estimated_tokens_direct: 8000
 
 mode_profiles:
+  # Every budget value in a profile is a maximum. Plans may select lower
+  # values, subject to the validator's worst-case dispatch checks.
   lean:
     max_subagents: 2
     max_input_tokens_per_task: 8000
@@ -63,7 +65,9 @@ scout_policy:
 model_routing:
   # Tiers are defaults, not silent choices. This host-neutral config contains
   # no exact scout model; authorization supplies one through the selected
-  # adapter and validation occurs before dispatch.
+  # adapter and validation occurs before dispatch. The approved token ceiling
+  # may be lower than max_total_dispatched_tokens but may not be below the
+  # worst-case dispatched input including expansion allowances.
   planner_tier: "expensive (current main-task model)"
   scout_tier: "cheap (user-approved override allowed)"
   scout_model_source: "explicit user authorization through the selected adapter"

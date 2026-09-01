@@ -8,9 +8,11 @@ source overlap. Token estimates are planning approximations, not billing
 truth; the estimator weights CJK characters near one token per character and
 other text near four characters per token.
 
-The configuration digest is computed over the configuration content with line
-endings normalized to LF, so the same configuration blob hashes identically
-across CRLF (Windows autocrlf) and LF (Linux/macOS) checkouts.
+Text-resource digests are computed from canonical UTF-8/LF content: UTF-8 text
+is decoded, CRLF and lone CR line endings become LF, the text is re-encoded as
+UTF-8, and SHA-256 is applied. This keeps configuration, protocol, and adapter
+digests identical across CRLF (Windows autocrlf) and LF (Linux/macOS) checkouts;
+binary and generated packet artifacts retain raw-byte hashing.
 """
 
 from __future__ import annotations
@@ -185,7 +187,7 @@ def load_effective_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def sha256_file(path: Path) -> str:
-    """Return a stable SHA-256 digest for a UTF-8 or binary package file."""
+    """Return a raw-byte SHA-256 digest for binary or generated artifacts."""
     digest = hashlib.sha256()
     try:
         with path.open("rb") as stream:
@@ -353,6 +355,13 @@ def facts_for_sources(facts: Iterable[dict[str, Any]], source_ids: set[str]) -> 
 def validate_plan(
     plan: dict[str, Any], config_path: Path | None = None
 ) -> dict[str, Any]:
+    """Validate a plan against the effective configuration.
+
+    Mode-profile budget values are maximum limits, so a plan may select lower
+    values. The discovery authorization token ceiling is the actual approved
+    ceiling and must cover the computed worst-case dispatch without exceeding
+    ``budget.max_total_dispatched_tokens``.
+    """
     errors: list[str] = []
     warnings: list[str] = []
 

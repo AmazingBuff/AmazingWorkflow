@@ -4,7 +4,7 @@ revision: {{REVISION}}
 status: "DRAFT"
 created_at: "{{ISO_8601_TIMESTAMP}}"
 supersedes: null
-workflow_revision: "0.6.1"
+workflow_revision: "0.6.2"
 protocol_version: "0.6"
 protocol_sha256: null
 host_adapter: null

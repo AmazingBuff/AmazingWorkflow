@@ -71,16 +71,17 @@ baseline, versions, runtime references, and license details together.
 
 ## External coding-rule authority
 
-The generated project uses the installed
-`lightweight-coding-workflow` skill's `assets/coding-rules/`
-directory and its `manifest.json` as the canonical rule source.
-Locate that skill through the host's skill-discovery mechanism and resolve
-the rule paths inside its root; do not assume a relative sibling path and do
-not fall back to guessing. A separately copied SKSE rule set, fallback,
-symlink, or second hash inventory is not allowed. When the
-lightweight-coding-workflow skill is not installed, treat the rule authority
-as unavailable and record scaffolding or maintenance work as blocked on that
-missing dependency rather than proceeding without it.
+The active host Skill catalog is authoritative and must report
+`lightweight-coding-workflow` enabled and discoverable before resolving the
+installed skill's `assets/coding-rules/` directory and `manifest.json`. If the
+catalog is unavailable, inspect loaded Skill metadata, then host-native roots
+including `$CODEX_HOME/skills/`, `~/.codex/skills/`, `~/.zcode/skills/`,
+`~/.agents/skills/`, `<project>/.zcode/skills/`, and
+`<project>/.agents/skills/`. Filesystem presence alone is insufficient; require
+enabled and discoverable status. A separately copied SKSE rule set, fallback,
+symlink, or second hash inventory is not allowed. When the dependency is not
+available, record scaffolding or maintenance work as blocked rather than
+proceeding without the discovered authority.
 
 Update the rules only in the lightweight source through a separately approved
 change. Keep the shared code contract, applicable C++ references, manifest

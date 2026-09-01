@@ -58,11 +58,15 @@ ZCode binds a subagent's model at the definition level, not at dispatch time. Us
 | Model validation | `validate_model` | Confirm an agent definition loaded in the current session binds the exact user-approved model, or that the dispatched type has no binding for approved parent inheritance; see `validate_model` below. | Return to planning when no loaded agent type binds the approved selection; `CAPABILITY_UNAVAILABLE` for implementation while this adapter is not verified. |
 | Worker dispatch | `dispatch_worker` | One Agent-tool subagent of the model-bound agent type with the complete Core envelope. | Do not call; return `CAPABILITY_UNAVAILABLE` before writes. |
 | Permission inheritance | `inherit_permissions` | Subagents inherit the session sandbox and permission mode; the permission system mediates tool calls. | Do not exercise for product writes before promotion. |
-| Lifecycle control | `control_lifecycle` | Agent-tool task lifecycle (background execution, TaskOutput, TaskStop) with single-writer ownership confirmed before spawn. | Do not start a writer; incomplete retained evidence prevents dispatch. |
-| Progress reporting | `report_progress` | Observe subagent progress via TaskOutput while raw logs remain with the worker. | Validation artifacts only until promotion. |
+| Lifecycle control | `control_lifecycle` | ZCode Agent-tool lifecycle surface; persistent continuation, interruption, and replacement controls remain unresolved pending live host-tool-schema evidence. | Do not start a writer; incomplete retained evidence prevents dispatch. |
+| Progress reporting | `report_progress` | ZCode task-state/progress surface; exact observation and persistence behavior remain unresolved pending live host-tool-schema evidence. | Validation artifacts only until promotion. |
 | Result relay | `relay_result` | Subagent final message validated against the Core result schemas, including `DOCUMENTATION`. | Validation artifacts only until promotion. |
 | Version-control management | `manage_version_control` | Read-only Git baseline inspection; exact-path staging and commit only under contract authority. | Read-only artifact validation only. |
 | Read-only scout dispatch (optional) | `dispatch_scout` | One `Explore`-type subagent per scout task packet, with the approved scout model bound to that agent type; the host enforces read-only access; evidence packets returned as the subagent final message. | `CAPABILITY_UNAVAILABLE` until this adapter is promoted; until then the Planner uses the fast lane. |
+
+Persistent continuation, interruption, completion, and safe replacement are not
+claimed mappings: their exact controls and request/response schema remain
+unresolved until exercised against a live ZCode host tool schema.
 
 ## `validate_model` (candidate)
 
@@ -84,7 +88,7 @@ If the approved selection cannot be represented by a loaded agent type, return t
 - model selection representability: exercise per-definition model binding (`model` and `thoughtLevel`) on a custom agent and on a built-in agent, confirm definitions load only at session start, and confirm dispatching the bound type runs the approved model; confirm no per-dispatch override surface exists so an unrepresentable selection returns to planning;
 - single-writer dispatch with the full envelope, including coding-rule paths;
 - read-only scout dispatch with a scout agent binding the approved cheap model, confirming the host rejects any write attempt and the evidence packet survives the subagent boundary;
-- interruption, continuation, completion, and safe replacement through TaskOutput/TaskStop;
+- live host-tool-schema exercise of persistence, continuation, interruption, completion, and safe replacement, with retained evidence before any of those behaviors are claimed;
 - lossless relay of all three result schemas;
 - the full Git fixture checklist from the Host Adapter Contract;
 - capability-unavailable behavior before writes for this `EXPERIMENTAL` state.

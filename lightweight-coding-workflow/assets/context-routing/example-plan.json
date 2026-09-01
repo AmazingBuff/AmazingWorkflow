@@ -7,7 +7,7 @@
     "id": "context-routing-defaults",
     "source": "assets/context-routing/default-config.yaml",
     "revision": 1,
-    "digest": "sha256:1ec271879d6ba6613d74ac8c5756a85cc9ee501fdf1bf6b30ee25a4e4c6c853c"
+    "digest": "sha256:228185458b76f43a214932b4158e0c2babc72515bb642e9be5ca916e67a630d9"
   },
   "routing": {
     "decision": "orchestrated",
@@ -20,7 +20,7 @@
     "authorized": true,
     "scout_model": "user-approved-scout-model",
     "packet_count": 3,
-    "token_ceiling": 30000
+    "token_ceiling": 20000
   },
   "assumptions": [
     "Source descriptors refer to one consistent repository revision.",

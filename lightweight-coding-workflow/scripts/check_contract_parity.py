@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import sys
@@ -27,12 +26,13 @@ from validate_plan import (
     VALID_MODES,
     load_effective_config,
     load_plan,
+    sha256_text_normalized,
     validate_plan,
 )
 
 PLAN_SCHEMA_ID = "urn:lightweight-coding-workflow:orchestration-plan-schema:1.1"
 EVIDENCE_SCHEMA_ID = "urn:lightweight-coding-workflow:evidence-packet-schema:1.1"
-WORKFLOW_REVISION = "0.6.1"
+WORKFLOW_REVISION = "0.6.2"
 CORE_PROTOCOL_VERSION = "0.6"
 CODEX_ADAPTER_VERSION = "0.6"
 CONTRACT_EVIDENCE_FIELDS = (
@@ -44,6 +44,35 @@ CONTRACT_EVIDENCE_FIELDS = (
     "adapter_sha256",
 )
 SHA256_PATTERN = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
+REQUIRED_ADAPTER_METADATA_FIELDS = {
+    "host_adapter",
+    "host_id",
+    "display_name",
+    "protocol_version",
+    "adapter_version",
+    "support_state",
+    "supported_surfaces",
+    "capabilities",
+    "verified_on",
+}
+REQUIRED_ADAPTER_CAPABILITIES = {
+    "host_identification",
+    "planner_binding",
+    "model_validation",
+    "worker_dispatch",
+    "permission_inheritance",
+    "lifecycle_control",
+    "progress_reporting",
+    "result_relay",
+    "version_control_management",
+}
+OPTIONAL_ADAPTER_CAPABILITIES = {"read_only_scout_dispatch"}
+VALID_SUPPORT_STATES = {
+    "VERIFIED",
+    "EXPERIMENTAL",
+    "AUTHORING_ONLY",
+    "UNSUPPORTED",
+}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -63,26 +92,6 @@ def check_equal(
         errors.append(f"{label} drift: expected {expected!r}, got {actual!r}")
 
 
-def normalized_sha256(path: Path) -> str:
-    """Return a SHA-256 digest with line endings normalized to LF.
-
-    Matches the digest semantics of validate_plan.py so CRLF and LF
-    checkouts of the same text produce identical digests; undecodable
-    (binary) content falls back to hashing the raw bytes.
-    """
-    try:
-        payload = path.read_bytes()
-    except OSError as exc:
-        raise ValueError(f"unable to hash file: {path}: {exc}") from exc
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError:
-        digest_input: bytes = payload
-    else:
-        digest_input = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
-    return hashlib.sha256(digest_input).hexdigest()
-
-
 def read_front_matter(path: Path) -> dict[str, str | None]:
     content = path.read_text(encoding="utf-8")
     content = content.lstrip("\ufeff").replace("\r\n", "\n")
@@ -98,6 +107,8 @@ def read_front_matter(path: Path) -> dict[str, str | None]:
         key, separator, raw_value = line.partition(":")
         if not separator or not key.strip():
             raise ValueError(f"invalid contract front matter line: {line}")
+        if key.strip() in values:
+            raise ValueError(f"duplicate contract front matter key: {key.strip()}")
         value = raw_value.strip()
         if value in {"null", "~"}:
             values[key.strip()] = None
@@ -106,11 +117,197 @@ def read_front_matter(path: Path) -> dict[str, str | None]:
     return values
 
 
-def _source_revision(content: str, label: str) -> str | None:
-    match = re.search(
-        rf"{re.escape(label)}:\s*[`\"]?([^`\"\s]+)[`\"]?", content
+def _parse_front_matter_value(value: str) -> str | None:
+    if value in {"null", "~"}:
+        return None
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def read_adapter_front_matter(path: Path) -> dict[str, Any]:
+    """Read adapter metadata while preserving list items and duplicate errors."""
+    content = path.read_text(encoding="utf-8")
+    lines = (
+        content.lstrip("\ufeff")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .splitlines()
     )
-    return match.group(1) if match else None
+    if not lines or lines[0] != "---":
+        raise ValueError(f"adapter has no YAML front matter: {path}")
+    try:
+        end = lines.index("---", 1)
+    except ValueError as exc:
+        raise ValueError(f"adapter front matter is unterminated: {path}") from exc
+
+    values: dict[str, Any] = {}
+    active_list: str | None = None
+    for line_number, line in enumerate(lines[1:end], start=2):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("-"):
+            if not stripped.startswith("- "):
+                raise ValueError(
+                    f"invalid adapter front matter list item at {path}:{line_number}"
+                )
+            if active_list is None or not isinstance(values.get(active_list), list):
+                raise ValueError(
+                    f"adapter front matter list item has no list key at "
+                    f"{path}:{line_number}"
+                )
+            values[active_list].append(_parse_front_matter_value(stripped[2:].strip()))
+            continue
+        if line[:1].isspace():
+            raise ValueError(
+                f"invalid adapter front matter indentation at {path}:{line_number}"
+            )
+        key, separator, raw_value = line.partition(":")
+        key = key.strip()
+        if not separator or not key:
+            raise ValueError(
+                f"invalid adapter front matter line at {path}:{line_number}: {line}"
+            )
+        if key in values:
+            raise ValueError(
+                f"duplicate adapter front matter key at {path}:{line_number}: {key}"
+            )
+        value = raw_value.strip()
+        if value:
+            values[key] = _parse_front_matter_value(value)
+            active_list = None
+        else:
+            values[key] = []
+            active_list = key
+    return values
+
+
+def validate_adapter_metadata(
+    metadata: dict[str, Any],
+    errors: list[str],
+    *,
+    expected_adapter_version: str | None = None,
+) -> None:
+    """Validate the exact adapter metadata required by the Core contract."""
+    missing = sorted(REQUIRED_ADAPTER_METADATA_FIELDS - set(metadata))
+    if missing:
+        errors.append(
+            "adapter metadata is incomplete; missing fields: " + ", ".join(missing)
+        )
+
+    for field in (
+        "host_adapter",
+        "host_id",
+        "display_name",
+        "protocol_version",
+        "adapter_version",
+        "support_state",
+    ):
+        value = metadata.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"adapter metadata field {field} must be a non-empty string")
+
+    if metadata.get("protocol_version") != CORE_PROTOCOL_VERSION:
+        errors.append(
+            "adapter metadata protocol_version must be exactly "
+            f"{CORE_PROTOCOL_VERSION!r}"
+        )
+    if (
+        expected_adapter_version is not None
+        and metadata.get("adapter_version") != expected_adapter_version
+    ):
+        errors.append(
+            "adapter metadata adapter_version drift: expected "
+            f"{expected_adapter_version!r}, got {metadata.get('adapter_version')!r}"
+        )
+
+    support_state = metadata.get("support_state")
+    if support_state not in VALID_SUPPORT_STATES:
+        errors.append(
+            "adapter metadata support_state must be one of "
+            f"{sorted(VALID_SUPPORT_STATES)}"
+        )
+    elif support_state != "VERIFIED":
+        errors.append(
+            "adapter metadata support_state must be 'VERIFIED' for implementation"
+        )
+
+    surfaces = metadata.get("supported_surfaces")
+    if not isinstance(surfaces, list) or not surfaces:
+        errors.append("adapter metadata supported_surfaces must be a non-empty list")
+    elif any(not isinstance(item, str) or not item.strip() for item in surfaces):
+        errors.append("adapter metadata supported_surfaces must contain strings")
+
+    capabilities = metadata.get("capabilities")
+    if not isinstance(capabilities, list):
+        errors.append("adapter metadata capabilities must be a list")
+    else:
+        capability_names = [item for item in capabilities if isinstance(item, str)]
+        duplicates = sorted(
+            {item for item in capability_names if capability_names.count(item) > 1}
+        )
+        if duplicates:
+            errors.append(
+                "adapter metadata capabilities contains duplicates: "
+                + ", ".join(duplicates)
+            )
+        if len(capability_names) != len(capabilities):
+            errors.append("adapter metadata capabilities must contain strings")
+        actual = set(capability_names)
+        missing_capabilities = sorted(REQUIRED_ADAPTER_CAPABILITIES - actual)
+        extra_capabilities = sorted(actual - REQUIRED_ADAPTER_CAPABILITIES)
+        if missing_capabilities:
+            errors.append(
+                "adapter metadata capabilities is incomplete; missing: "
+                + ", ".join(missing_capabilities)
+            )
+        if extra_capabilities:
+            errors.append(
+                "adapter metadata capabilities contains incompatible entries: "
+                + ", ".join(extra_capabilities)
+            )
+
+    optional = metadata.get("optional_capabilities")
+    if optional is not None:
+        if not isinstance(optional, list):
+            errors.append("adapter metadata optional_capabilities must be a list")
+        else:
+            optional_names = [item for item in optional if isinstance(item, str)]
+            duplicates = sorted(
+                {item for item in optional_names if optional_names.count(item) > 1}
+            )
+            if duplicates:
+                errors.append(
+                    "adapter metadata optional_capabilities contains duplicates: "
+                    + ", ".join(duplicates)
+                )
+            if len(optional_names) != len(optional):
+                errors.append(
+                    "adapter metadata optional_capabilities must contain strings"
+                )
+            extra_optional = sorted(set(optional_names) - OPTIONAL_ADAPTER_CAPABILITIES)
+            if extra_optional:
+                errors.append(
+                    "adapter metadata optional_capabilities contains incompatible "
+                    "entries: "
+                    + ", ".join(extra_optional)
+                )
+
+    if support_state == "VERIFIED":
+        verified_on = metadata.get("verified_on")
+        if not isinstance(verified_on, str) or not verified_on.strip():
+            errors.append(
+                "adapter metadata verified_on must be populated for VERIFIED adapters"
+            )
+
+
+def _source_revision(content: str, label: str) -> str | None:
+    matches = re.findall(
+        rf"(?m)^{re.escape(label)}:\s*[`\"]?([^`\"\s]+)[`\"]?\.?\s*$",
+        content,
+    )
+    return matches[0] if len(matches) == 1 else None
 
 
 def validate_approved_contract(
@@ -140,7 +337,7 @@ def validate_approved_contract(
         workflow_text = (root / "SKILL.md").read_text(encoding="utf-8")
         protocol_text = protocol_path.read_text(encoding="utf-8")
         adapter_text = adapter_path.read_text(encoding="utf-8")
-        adapter_meta = read_front_matter(adapter_path)
+        adapter_meta = read_adapter_front_matter(adapter_path)
     except (OSError, UnicodeError, ValueError) as exc:
         return [*errors, f"contract evidence check: {exc}"]
 
@@ -152,6 +349,15 @@ def validate_approved_contract(
             errors.append(
                 f"contract evidence check: {field} must be populated without placeholders"
             )
+
+    validate_adapter_metadata(adapter_meta, errors)
+    if adapter_meta.get("host_adapter") == "codex":
+        check_equal(
+            adapter_meta.get("adapter_version"),
+            CODEX_ADAPTER_VERSION,
+            "Codex adapter version",
+            errors,
+        )
 
     expected_workflow = _source_revision(workflow_text, "Workflow revision")
     expected_protocol = _source_revision(protocol_text, "Protocol version")
@@ -195,7 +401,7 @@ def validate_approved_contract(
     else:
         check_equal(
             protocol_digest,
-            f"sha256:{normalized_sha256(protocol_path)}",
+            f"sha256:{sha256_text_normalized(protocol_path)}",
             "contract protocol SHA-256",
             errors,
         )
@@ -207,7 +413,7 @@ def validate_approved_contract(
     else:
         check_equal(
             adapter_digest,
-            f"sha256:{normalized_sha256(adapter_path)}",
+            f"sha256:{sha256_text_normalized(adapter_path)}",
             "contract adapter SHA-256",
             errors,
         )
@@ -343,11 +549,17 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         skill_text = skill_path.read_text(encoding="utf-8")
         protocol_text = protocol_path.read_text(encoding="utf-8")
         adapter_text = adapter_path.read_text(encoding="utf-8")
+        adapter_meta = read_adapter_front_matter(adapter_path)
         config_text = config_path.read_text(encoding="utf-8")
         example_text = example_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as exc:
+    except (OSError, UnicodeError, ValueError) as exc:
         errors.append(f"contract parity source read failed: {exc}")
     else:
+        validate_adapter_metadata(
+            adapter_meta,
+            errors,
+            expected_adapter_version=CODEX_ADAPTER_VERSION,
+        )
         if 'revision: {{REVISION}}' not in template_text:
             errors.append("implementation-contract template must retain the revision placeholder")
         if 'status: "DRAFT"' not in template_text:
@@ -391,6 +603,16 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
     if not plan_report["valid"]:
         errors.extend(f"example plan: {error}" for error in plan_report["errors"])
     else:
+        example_budget = example_plan["budget"]
+        token_ceiling = example_plan["discovery_authorization"]["token_ceiling"]
+        max_total = example_budget["max_total_dispatched_tokens"]
+        worst_case = plan_report["metrics"]["worst_case_total_input_tokens"]
+        if not worst_case <= token_ceiling <= max_total:
+            errors.append(
+                "example plan token ceiling must satisfy "
+                "worst_case_total_input_tokens <= token_ceiling <= "
+                "max_total_dispatched_tokens"
+            )
         source_map = {source["id"]: source for source in example_plan["sources"]}
         sample_task = example_plan["tasks"][0]
         generated_packet = build_packet(

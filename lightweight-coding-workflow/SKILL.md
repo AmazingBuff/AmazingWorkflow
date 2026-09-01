@@ -5,7 +5,7 @@ description: Orchestrate requested code changes as user-facing planning in the c
 
 # Lightweight Coding Workflow
 
-Workflow revision: `0.6.1`.
+Workflow revision: `0.6.2`.
 
 Protocol version: `0.6`.
 
@@ -28,7 +28,9 @@ Fast-lane startup does not require orchestration-only, Git-only, documentation-o
 
 Before approval or dispatch, the contract's `workflow_revision`, `protocol_version`, `protocol_sha256`, `host_adapter`, `adapter_version`, and `adapter_sha256` must be populated from the exact loaded source files. The selected adapter verifies these values before any implementation worker starts.
 
-Workflow revision compatibility is explicit: contracts approved under workflow revision `0.6` remain immutable and use their matching historical resources. New `0.6.1` contracts require the evidence fields above; this release does not change Core protocol `0.6`.
+Workflow revision compatibility is explicit: contracts approved under workflow revision `0.6` remain immutable and use their matching historical resources. New `0.6.2` contracts require the evidence fields above; this release does not change Core protocol `0.6` or Codex Adapter `0.6`.
+
+Workflow revision `0.6.2` migrates text-resource digests from the prior `0.6.1` raw-byte semantics to one canonical UTF-8/LF representation: decode UTF-8 text, normalize CRLF and lone CR to LF, re-encode as UTF-8, and hash it with SHA-256. This applies to configuration, protocol, and adapter text; binary and generated packet artifacts retain raw-byte hashing because their byte identity matters. Existing approved `0.6.1` contracts may continue with matching historical `0.6.1` resources; reapproval is required only to run a task under workflow revision `0.6.2` and its canonical UTF-8/LF text-digest semantics.
 
 Complete this gate before asking the user to approve implementation or performing any product-code write. `EXPERIMENTAL`, `AUTHORING_ONLY`, and `UNSUPPORTED` adapters are not eligible for implementation. User consent cannot promote an adapter or authorize it to cross the write gate. If no adapter matches, more than one verified adapter matches, or any required capability is unavailable, return `CAPABILITY_UNAVAILABLE` with the host, adapter candidates, and missing capability; do not approve a contract, dispatch a worker, or implement in the Planner as a fallback.
 

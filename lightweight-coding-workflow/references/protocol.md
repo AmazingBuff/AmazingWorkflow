@@ -55,7 +55,7 @@ The adapter owns the host-specific representation and validation of the approved
 
 The Planner must not mark a contract `APPROVED` until the workflow revision, protocol digest, and adapter digest are populated and verified against the exact resources selected for that task.
 
-Workflow revision `0.6.1` adds mandatory contract evidence and progressive reference loading without changing Core protocol `0.6`. Contracts approved under workflow revision `0.6` remain immutable and continue with matching historical resources. New `0.6.1` contracts require `workflow_revision`, `protocol_sha256`, and `adapter_sha256` before approval or dispatch.
+Workflow revision `0.6.2` retains Core protocol `0.6` and Codex Adapter `0.6`. It migrates text-resource digests from the prior `0.6.1` raw-byte semantics to canonical UTF-8/LF text: decode UTF-8, normalize CRLF and lone CR to LF, re-encode UTF-8, then hash with SHA-256. Configuration, protocol, and adapter text use this representation; binary and generated packet artifacts retain raw-byte hashing. Existing approved `0.6.1` contracts may continue with matching historical `0.6.1` resources; reapproval is required only to run a task under workflow revision `0.6.2` and its canonical UTF-8/LF text-digest semantics. New `0.6.2` contracts require `workflow_revision`, `protocol_sha256`, and `adapter_sha256` before approval or dispatch.
 
 ### Revision rules
 
