@@ -2,8 +2,8 @@
 host_adapter: "zcode"
 host_id: "zcode"
 display_name: "ZCode Host Adapter"
-protocol_version: "0.6"
-adapter_version: "0.2"
+protocol_version: "0.7"
+adapter_version: "0.3"
 support_state: "EXPERIMENTAL"
 supported_surfaces:
   - "cli"
@@ -38,16 +38,16 @@ ZCode binds a subagent's model at the definition level, not at dispatch time. Us
 
 | Item | Candidate mapping |
 | --- | --- |
-| Core protocol | Exact version `0.6` |
-| Adapter | `zcode` version `0.2` |
+| Core protocol | Exact version `0.7` |
+| Adapter | `zcode` version `0.3` |
 | Planner | Current ZCode main task and its selected model |
 | Worker | One Agent-tool subagent of the agent type that binds the approved model: the custom `lightweight_implementer` definition for an exact model, or an unbound type for approved parent inheritance; only after promotion |
-| Scout | `Explore` subagent with the approved scout model bound to that agent type, or a custom read-only `lightweight_scout` definition binding that model |
+| PLAN task | `Explore` subagent with the approved PLAN-task model bound to that agent type, or a custom read-only `lightweight_scout` definition binding that model |
 | Model binding | Per agent definition (`model` field in `~/.zcode/agents/<name>.md`); the Agent tool exposes no per-dispatch model override |
 | Agent definitions | `~/.zcode/agents/<name>.md`, Markdown body as the system prompt, user scope only in the current Beta; Codex-style `agents/*.toml` files from this package are not read by ZCode and need Markdown equivalents |
 | Contract asset | Loaded Skill's `assets/implementation-contract.md` |
 | Task records | Repository-local `.zcode/task-runs/<task-id>/implementation-contract-v<revision>.md` |
-| Result schemas | Core `DONE`, `BLOCKED`, and `FAILED` Markdown schemas with `DOCUMENTATION` evidence; scouts return evidence packets |
+| Result schemas | Core `DONE`, `BLOCKED`, and `FAILED` Markdown schemas with `DOCUMENTATION` evidence; PLAN tasks return Evidence Packets |
 
 ## Operation map (candidate)
 
@@ -62,7 +62,7 @@ ZCode binds a subagent's model at the definition level, not at dispatch time. Us
 | Progress reporting | `report_progress` | ZCode task-state/progress surface; exact observation and persistence behavior remain unresolved pending live host-tool-schema evidence. | Validation artifacts only until promotion. |
 | Result relay | `relay_result` | Subagent final message validated against the Core result schemas, including `DOCUMENTATION`. | Validation artifacts only until promotion. |
 | Version-control management | `manage_version_control` | Read-only Git baseline inspection; exact-path staging and commit only under contract authority. | Read-only artifact validation only. |
-| Read-only scout dispatch (optional) | `dispatch_scout` | One `Explore`-type subagent per scout task packet, with the approved scout model bound to that agent type; the host enforces read-only access; evidence packets returned as the subagent final message. | `CAPABILITY_UNAVAILABLE` until this adapter is promoted; until then the Planner uses the fast lane. |
+| PLAN task dispatch (optional) | `dispatch_scout` | One `Explore`-type subagent per PLAN task packet, with the approved PLAN-task model bound to that agent type; the host enforces read-only access; Evidence Packets return as the subagent final message. | `CAPABILITY_UNAVAILABLE` until this adapter is promoted; until then the Planner uses direct PLAN handling. |
 
 Persistent continuation, interruption, completion, and safe replacement are not
 claimed mappings: their exact controls and request/response schema remain
@@ -87,7 +87,7 @@ If the approved selection cannot be represented by a loaded agent type, return t
 - positive host identification and rejection on a different host;
 - model selection representability: exercise per-definition model binding (`model` and `thoughtLevel`) on a custom agent and on a built-in agent, confirm definitions load only at session start, and confirm dispatching the bound type runs the approved model; confirm no per-dispatch override surface exists so an unrepresentable selection returns to planning;
 - single-writer dispatch with the full envelope, including coding-rule paths;
-- read-only scout dispatch with a scout agent binding the approved cheap model, confirming the host rejects any write attempt and the evidence packet survives the subagent boundary;
+- read-only PLAN-task dispatch with a task Agent binding the approved PLAN model, confirming the host rejects any write attempt and the Evidence Packet survives the subagent boundary;
 - live host-tool-schema exercise of persistence, continuation, interruption, completion, and safe replacement, with retained evidence before any of those behaviors are claimed;
 - lossless relay of all three result schemas;
 - the full Git fixture checklist from the Host Adapter Contract;

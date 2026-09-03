@@ -1,30 +1,58 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "2.0",
+  "envelope_type": "batch-plan",
   "plan_id": "payment-timeout-investigation",
   "goal": "Locate the cause of intermittent payment timeouts spanning the API layer, service layer, and database access layer, and gather evidence for an implementation contract.",
   "mode": "balanced",
   "configuration": {
     "id": "context-routing-defaults",
     "source": "assets/context-routing/default-config.yaml",
-    "revision": 1,
-    "digest": "sha256:228185458b76f43a214932b4158e0c2babc72515bb642e9be5ca916e67a630d9"
+    "revision": 2,
+    "digest": "sha256:059a56f6711789182135a18676d4ae842cec8f78240ab98202fbdcdd47dc30a7"
   },
   "routing": {
-    "decision": "orchestrated",
+    "decision": "batch",
     "estimated_files": 5,
     "estimated_tokens": 7500,
     "multiple_information_boundaries": true,
-    "basis": "The investigation crosses distinct API, service, database, and log information boundaries."
+    "basis": "The investigation crosses distinct API, service, database, and log information boundaries; two independent bounded tasks can run concurrently.",
+    "economics": {
+      "planner_context_savings": 10000,
+      "delegated_input_tokens": 11021,
+      "estimated_result_tokens": 1600,
+      "coordination_overhead_tokens": 600,
+      "weighted_cost_savings": 1800,
+      "weighted_cost_rationale": "Delegated source reading removes a larger context slice from the current Planner and uses the pre-authorized lower-cost task model; total tokens may increase and are not claimed as saved.",
+      "independently_describable": true,
+      "evidence_already_present": false,
+      "continuous_planner_judgment": false,
+      "total_token_savings_claimed": false
+    }
   },
-  "discovery_authorization": {
+  "plan_task_authorization": {
     "authorized": true,
-    "scout_model": "user-approved-scout-model",
-    "packet_count": 3,
-    "token_ceiling": 20000
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "task_count": 3,
+    "token_ceiling": 12000
+  },
+  "plan_task_policy": {
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "max",
+    "max_concurrent_tasks": 2,
+    "max_estimated_input_tokens_per_round": 12000,
+    "pass_parent_transcript": false,
+    "sandbox_mode": "read-only",
+    "allow_writes": false,
+    "allow_external_mutations": false,
+    "user_visible_dispatch_notice": true,
+    "per_task_approval_required": false,
+    "over_policy": "user-approval-or-direct-fallback"
   },
   "assumptions": [
     "Source descriptors refer to one consistent repository revision.",
-    "Token counts are estimates from the source index."
+    "Token counts are estimates from the source index; they are not billing claims.",
+    "The Planner will show one dispatch notice before any in-policy PLAN task is started."
   ],
   "budget": {
     "max_subagents": 3,
@@ -45,87 +73,63 @@
       {
         "id": "fact-db-pool-size",
         "statement": "The connection pool caps at 20 connections with a 30-second lease.",
-        "provenance": [
-          "src-db-pool"
-        ],
+        "provenance": ["src-db-pool"],
         "confidence": "confirmed"
       }
     ],
     "constraints": [
-      "Scouts are read-only: no product-code writes, no requirement changes, no user interaction.",
+      "PLAN task Agents are read-only: no product-code writes, no requirement changes, no user interaction, no contract authoring, and no spawned Agents.",
       "Every material claim must cite a precise source locator."
     ],
-    "source_ids": [
-      "src-api-types"
-    ]
+    "source_ids": ["src-api-types"]
   },
   "sources": [
     {
       "id": "src-api-types",
       "uri": "src/api/types.ts",
-      "selector": {
-        "type": "lines",
-        "start": 1,
-        "end": 120
-      },
+      "selector": {"type": "lines", "start": 1, "end": 120},
       "estimated_tokens": 900,
       "purpose": "Shared request/response types and error codes used across all layers",
-      "summary": "Small common interface needed by API and service scouts."
+      "summary": "Small common interface needed by API and service tasks."
     },
     {
       "id": "src-payment-controller",
       "uri": "src/api/payment_controller.py",
-      "selector": {
-        "type": "symbol",
-        "name": "PaymentController.submit"
-      },
+      "selector": {"type": "symbol", "name": "PaymentController.submit"},
       "estimated_tokens": 1400,
       "purpose": "Payment submission endpoint, timeout configuration, retry behavior"
     },
     {
       "id": "src-service-layer",
       "uri": "src/services/payment_service.py",
-      "selector": {
-        "type": "lines",
-        "start": 40,
-        "end": 320
-      },
+      "selector": {"type": "lines", "start": 40, "end": 320},
       "estimated_tokens": 2600,
       "purpose": "Payment orchestration, transaction boundaries, downstream calls"
     },
     {
       "id": "src-db-pool",
       "uri": "src/db/connection_pool.py",
-      "selector": {
-        "type": "lines",
-        "start": 1,
-        "end": 180
-      },
+      "selector": {"type": "lines", "start": 1, "end": 180},
       "estimated_tokens": 1500,
       "purpose": "Connection pooling, lease handling, timeout propagation"
     },
     {
       "id": "src-logs-sample",
       "uri": "logs/payment_timeouts.log",
-      "selector": {
-        "type": "lines",
-        "start": 1,
-        "end": 200
-      },
+      "selector": {"type": "lines", "start": 1, "end": 200},
       "estimated_tokens": 1100,
       "purpose": "Timestamped timeout traces correlating requests across layers"
     }
   ],
   "tasks": [
     {
-      "id": "task-api-scout",
-      "agent_role": "api-scout",
+      "id": "task-api-read",
+      "agent_id": "lightweight_scout",
+      "agent_role": "api-evidence-task",
+      "task_kind": "repository-read",
       "objective": "Determine how the payment endpoint configures timeouts and retries and what the logs show about where the 5-8 second window originates.",
       "dependencies": [],
-      "source_ids": [
-        "src-payment-controller",
-        "src-logs-sample"
-      ],
+      "source_ids": ["src-payment-controller", "src-logs-sample"],
       "questions": [
         "What is the configured client-facing timeout and does it match the 5-8 second window?",
         "Do the logs show timeouts originating at the API layer or passed up from below?",
@@ -134,26 +138,18 @@
       "deliverable": "Findings on API-layer timeout behavior with exact locators and log line references.",
       "evidence_required": true,
       "intentional_overlap": false,
-      "capabilities": [
-        "materialize",
-        "log-analysis"
-      ],
-      "allowed_expansion": {
-        "mode": "request",
-        "max_additional_tokens": 2000
-      },
-      "stop_conditions": [
-        "All listed questions are answered or explicitly blocked."
-      ]
+      "capabilities": ["materialize", "log-analysis"],
+      "allowed_expansion": {"mode": "request", "max_additional_tokens": 300},
+      "stop_conditions": ["All listed questions are answered or explicitly blocked."]
     },
     {
-      "id": "task-service-scout",
-      "agent_role": "service-scout",
+      "id": "task-service-analysis",
+      "agent_id": "lightweight_scout",
+      "agent_role": "service-evidence-task",
+      "task_kind": "evidence-analysis",
       "objective": "Determine how the payment service manages transaction boundaries and downstream calls during the timeout window.",
-      "dependencies": [],
-      "source_ids": [
-        "src-service-layer"
-      ],
+      "dependencies": ["task-api-read"],
+      "source_ids": ["src-service-layer"],
       "questions": [
         "Which downstream calls sit on the critical path of payment submission?",
         "Are transaction boundaries held across slow calls?",
@@ -162,26 +158,18 @@
       "deliverable": "Findings on service-layer call structure with exact locators.",
       "evidence_required": true,
       "intentional_overlap": false,
-      "capabilities": [
-        "materialize",
-        "code-analysis"
-      ],
-      "allowed_expansion": {
-        "mode": "request",
-        "max_additional_tokens": 2500
-      },
-      "stop_conditions": [
-        "All critical-path calls and their failure modes are accounted for."
-      ]
+      "capabilities": ["materialize", "code-analysis"],
+      "allowed_expansion": {"mode": "request", "max_additional_tokens": 300},
+      "stop_conditions": ["All critical-path calls and their failure modes are accounted for."]
     },
     {
-      "id": "task-db-scout",
-      "agent_role": "db-scout",
+      "id": "task-db-check",
+      "agent_id": "lightweight_scout",
+      "agent_role": "dependency-evidence-task",
+      "task_kind": "dependency-check",
       "objective": "Determine whether connection-pool lease behavior explains intermittent timeouts.",
       "dependencies": [],
-      "source_ids": [
-        "src-db-pool"
-      ],
+      "source_ids": ["src-db-pool"],
       "questions": [
         "Can pool exhaustion delay connection acquisition past the client timeout?",
         "Are leases released on all failure paths?",
@@ -190,17 +178,9 @@
       "deliverable": "Findings on pool behavior under load with exact locators.",
       "evidence_required": true,
       "intentional_overlap": false,
-      "capabilities": [
-        "materialize",
-        "code-analysis"
-      ],
-      "allowed_expansion": {
-        "mode": "request",
-        "max_additional_tokens": 2000
-      },
-      "stop_conditions": [
-        "All lease acquisition and release paths in scope are accounted for."
-      ]
+      "capabilities": ["materialize", "code-analysis"],
+      "allowed_expansion": {"mode": "request", "max_additional_tokens": 300},
+      "stop_conditions": ["All lease acquisition and release paths in scope are accounted for."]
     }
   ],
   "merge": {
@@ -209,7 +189,8 @@
     "final_checks": [
       "Every accepted material finding has a source locator.",
       "The root-cause hypothesis is consistent with the log timeline.",
-      "No conclusion depends on mismatched source versions."
+      "No conclusion depends on mismatched source versions.",
+      "The Planner records context savings, delegated input, result size, and weighted-cost rationale without claiming total-token savings."
     ]
   }
 }

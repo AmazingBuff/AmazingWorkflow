@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build standalone, source-descriptor-only task packets from a validated plan."""
+"""Build source-descriptor-only PLAN task packets from validated envelopes."""
 
 from __future__ import annotations
 
@@ -12,19 +12,27 @@ from pathlib import Path
 from typing import Any
 
 from validate_evidence_packet import (
+    EVIDENCE_PACKET_EVIDENCE_FIELDS,
+    EVIDENCE_PACKET_FACT_FIELDS,
     EVIDENCE_PACKET_FINDING_FIELDS,
     EVIDENCE_PACKET_REQUIRED_FIELDS,
     EVIDENCE_PACKET_TOP_LEVEL_OPTIONAL_FIELDS,
+    FACT_CONFIDENCE_VALUES,
+    FINDING_CONFIDENCE_VALUES,
+    FINDING_SEVERITY_VALUES,
 )
 from validate_plan import (
+    READ_ONLY_TASK_KINDS,
     SUPPORTED_SCHEMA_VERSION,
     facts_for_sources,
     load_plan,
     sha256_file,
+    validate_micro_task,
     validate_plan,
 )
 
-GENERATOR_MARKER = "lightweight-coding-workflow.build_task_packets/v1"
+GENERATOR_MARKER = "lightweight-coding-workflow.build_task_packets/v2"
+TASK_PACKET_TYPE = "plan-task"
 
 
 def topological_layers(tasks: list[dict[str, Any]]) -> list[list[str]]:
@@ -198,16 +206,29 @@ def build_packet(
         for dependency in task.get("dependencies", [])
     }
 
+    task_kind = task["task_kind"]
+    if task_kind not in READ_ONLY_TASK_KINDS:
+        raise ValueError(f"batch PLAN task kind is not read-only: {task_kind}")
+
     return {
         "schema_version": plan["schema_version"],
-        "packet_type": "subagent-task",
+        "packet_type": TASK_PACKET_TYPE,
+        "envelope_type": "batch-task",
         "plan_id": plan["plan_id"],
         "task_id": task["id"],
         "configuration": plan["configuration"],
         "routing": plan["routing"],
-        "discovery_authorization": plan["discovery_authorization"],
+        "plan_task_authorization": plan["plan_task_authorization"],
+        "plan_task_policy": plan["plan_task_policy"],
+        "model_override": {
+            "model": plan["plan_task_authorization"]["model"],
+            "reasoning_effort": plan["plan_task_authorization"]["reasoning_effort"],
+            "explicit": True,
+        },
         "parent_goal": plan["goal"],
         "mode": plan["mode"],
+        "task_kind": task_kind,
+        "agent_id": task.get("agent_id", "lightweight_scout"),
         "agent_role": task["agent_role"],
         "objective": task["objective"],
         "context": {
@@ -229,6 +250,8 @@ def build_packet(
         "execution_rules": [
             "Read only assigned sources initially.",
             "Do not request or assume access to the full parent transcript.",
+            "Do not write files or mutate external systems.",
+            "Do not decide requirements or scope, author a contract, or spawn an agent.",
             "Treat shared summaries as context, not primary evidence, when original sources are assigned.",
             "Use only the declared deny-or-request expansion policy for missing information.",
             "A request-mode expansion requires explicit Planner approval before reading the requested source.",
@@ -240,20 +263,81 @@ def build_packet(
             "packet_type": "subagent-result",
             "schema_ref": "assets/context-routing/evidence-packet.schema.json",
             "validation_authority": "scripts/validate_evidence_packet.py",
+            "task_kinds": sorted(READ_ONLY_TASK_KINDS),
             "required_fields": EVIDENCE_PACKET_REQUIRED_FIELDS,
             "optional_fields": EVIDENCE_PACKET_TOP_LEVEL_OPTIONAL_FIELDS,
             "status_values": ["complete", "partial", "blocked"],
             "finding_fields": EVIDENCE_PACKET_FINDING_FIELDS,
-            "evidence_fields": ["source_id", "locator", "note"],
+            "finding_severity_values": FINDING_SEVERITY_VALUES,
+            "finding_confidence_values": FINDING_CONFIDENCE_VALUES,
+            "evidence_fields": EVIDENCE_PACKET_EVIDENCE_FIELDS,
+            "fact_fields": EVIDENCE_PACKET_FACT_FIELDS,
+            "fact_confidence_values": FACT_CONFIDENCE_VALUES,
             "expansion_modes": ["deny", "request"],
         },
         "estimated_input": task_metrics,
     }
 
 
+def build_micro_task_packet(
+    envelope: dict[str, Any], validation_metrics: dict[str, Any]
+) -> dict[str, Any]:
+    """Build one standalone packet from the minimal micro-task envelope."""
+    task_kind = envelope["task_kind"]
+    if task_kind not in READ_ONLY_TASK_KINDS:
+        raise ValueError(f"micro-task kind is not read-only: {task_kind}")
+    assigned_sources = [
+        copy.deepcopy(source) for source in sorted(envelope["sources"], key=lambda item: item["id"])
+    ]
+    response_contract = copy.deepcopy(envelope["response_contract"])
+    response_contract.setdefault("task_kinds", sorted(READ_ONLY_TASK_KINDS))
+    return {
+        "schema_version": envelope["schema_version"],
+        "packet_type": TASK_PACKET_TYPE,
+        "envelope_type": "micro-task",
+        "plan_id": envelope["plan_id"],
+        "task_id": envelope["task_id"],
+        "task_kind": task_kind,
+        "parent_goal": envelope["goal"],
+        "objective": envelope["objective"],
+        "query": envelope["query"],
+        "questions": envelope.get("questions", [envelope["query"]]),
+        "deliverable": envelope["deliverable"],
+        "stop_conditions": envelope["stop_conditions"],
+        "assigned_sources": assigned_sources,
+        "plan_task_authorization": envelope["plan_task_authorization"],
+        "plan_task_policy": envelope["plan_task_policy"],
+        "model_override": envelope["model_override"],
+        "routing": envelope.get("routing", {"decision": "micro"}),
+        "economics": envelope["economics"],
+        "budget": envelope["budget"],
+        "allowed_expansion": envelope["allowed_expansion"],
+        "evidence_required": envelope["evidence_required"],
+        "agent_id": envelope.get("agent_id", "lightweight_scout"),
+        "agent_role": envelope.get("agent_role", "evidence-task-agent"),
+        "context": {
+            "assumptions": envelope.get("assumptions", []),
+            "facts": envelope.get("facts", []),
+            "constraints": envelope.get("constraints", []),
+        },
+        "execution_rules": {
+            "read_only": True,
+            "write_authority": "none",
+            "external_mutations": "forbidden",
+            "pass_parent_transcript": False,
+            "may_make_decisions": False,
+            "may_author_contract": False,
+            "may_spawn_agents": False,
+            "source_scope": "exact assigned descriptors and query only",
+        },
+        "response_contract": response_contract,
+        "estimated_input": validation_metrics,
+    }
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("plan", type=Path, help="path to orchestration-plan.json")
+    parser.add_argument("plan", type=Path, help="path to a direct, micro-task, or batch PLAN envelope")
     parser.add_argument(
         "--out",
         type=Path,
@@ -292,12 +376,70 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    report = validate_plan(plan, args.config)
+    is_micro_task = plan.get("envelope_type") == "micro-task"
+    report = validate_micro_task(plan, args.config) if is_micro_task else validate_plan(plan, args.config)
     if not report["valid"]:
         print("plan validation failed:", file=sys.stderr)
         for error in report["errors"]:
             print(f"  - {error}", file=sys.stderr)
         return 2
+
+    if is_micro_task:
+        generated_names = {"manifest.json", f"{plan['task_id']}.json"}
+        try:
+            prepare_output_directory(
+                args.out, args.overwrite, plan["plan_id"], generated_names
+            )
+        except (TypeError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
+        packet_path = args.out / f"{plan['task_id']}.json"
+        packet = build_micro_task_packet(plan, report["metrics"])
+        packet_path.write_text(
+            json.dumps(packet, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        packet_entry = {
+            "task_id": plan["task_id"],
+            "path": packet_path.name,
+            "sha256": f"sha256:{sha256_file(packet_path)}",
+            "dependencies": [],
+            "estimated_input_tokens": report["metrics"].get(
+                "estimated_input_tokens", 0
+            ),
+        }
+        manifest = {
+            "schema_version": plan["schema_version"],
+            "packet_type": "task-packet-manifest",
+            "generator_marker": GENERATOR_MARKER,
+            "plan_id": plan["plan_id"],
+            "routing_decision": "micro",
+            "plan_task_authorization": plan["plan_task_authorization"],
+            "plan_task_policy": plan["plan_task_policy"],
+            "packet_paths": [packet_path.name],
+            "dispatch_layers": [[plan["task_id"]]],
+            "packets": [packet_entry],
+            "plan_metrics": report["metrics"],
+            "warnings": report["warnings"],
+            "scheduler_note": (
+                "Invoke exactly one read-only Evidence Task Agent with the assigned "
+                "source descriptors and query; do not attach the parent transcript."
+            ),
+        }
+        manifest_path = args.out / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Built 1 micro PLAN task packet in {args.out}")
+        print(f"Manifest: {manifest_path}")
+        print(f"Dispatch layers: [[{plan['task_id']}]]")
+        print(
+            "Estimated input tokens: "
+            f"{report['metrics'].get('estimated_input_tokens', 0)}"
+        )
+        return 0
 
     try:
         layers = topological_layers(plan["tasks"])
@@ -350,7 +492,9 @@ def main(argv: list[str] | None = None) -> int:
         "generator_marker": GENERATOR_MARKER,
         "plan_id": plan["plan_id"],
         "mode": plan["mode"],
-        "discovery_authorization": plan["discovery_authorization"],
+        "routing_decision": "batch",
+        "plan_task_authorization": plan["plan_task_authorization"],
+        "plan_task_policy": plan["plan_task_policy"],
         "packet_paths": sorted(entry["path"] for entry in packet_entries),
         "dispatch_layers": layers,
         "packets": packet_entries,

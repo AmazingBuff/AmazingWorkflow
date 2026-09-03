@@ -2,8 +2,8 @@
 host_adapter: "dsh"
 host_id: "dsh"
 display_name: "DeepSeek Harness Host Adapter"
-protocol_version: "0.6"
-adapter_version: "0.6"
+protocol_version: "0.7"
+adapter_version: "0.7"
 support_state: "EXPERIMENTAL"
 supported_surfaces:
   - "web-gui"
@@ -24,7 +24,7 @@ verified_on: null
 
 Implementation dispatch eligibility: **no**. While `support_state` is `EXPERIMENTAL`, this artifact may be inspected and validated but cannot authorize or dispatch product writes.
 
-This reference records a candidate DeepSeek Harness (DSH) mapping for the [Host Adapter Contract](../adapter-contract.md) and [Core protocol](../protocol.md). The nine operation designs have not been exercised end to end with retained evidence on the claimed surface. Protocol `0.6` permits implementation dispatch only through a `VERIFIED` adapter, so no user decision or approved contract can select this mapping for writes.
+This reference records a candidate DeepSeek Harness (DSH) mapping for the [Host Adapter Contract](../adapter-contract.md) and [Core protocol](../protocol.md). The nine operation designs and the optional PLAN-task mapping have not been exercised end to end with retained evidence on the claimed surface. Protocol `0.7` permits implementation dispatch only through a `VERIFIED` adapter, so no user decision or approved contract can select this mapping for writes.
 
 Promotion requires every item in the [verification checklist](#verification-checklist), retained evidence, independent review, and a deliberate versioned metadata change. Until then, every attempted write dispatch fails before product changes with `CAPABILITY_UNAVAILABLE`.
 
@@ -32,14 +32,15 @@ Promotion requires every item in the [verification checklist](#verification-chec
 
 | Item | Candidate mapping |
 | --- | --- |
-| Core protocol | Exact version `0.6` |
-| Adapter | `dsh` version `0.6` |
+| Core protocol | Exact version `0.7` |
+| Adapter | `dsh` version `0.7` |
 | Planner | Current DSH main task and its deployed model |
 | Worker | One isolated DSH background subagent, only after promotion |
 | Contract asset | Loaded Skill's `assets/implementation-contract.md` |
 | Feature documentation | Loaded convention and template plus contract-selected repository paths |
 | Coding-rule components | Loaded Skill's `assets/coding-rules/**`, listed by absolute path in the contract |
 | Task records | Repository-local `.dsh/task-runs/<task-id>/implementation-contract-v<revision>.md` |
+| PLAN task | Candidate task-scoped read-only `lightweight_scout` mapping; unverified |
 | Result schemas | Core `DONE`, `BLOCKED`, and `FAILED` Markdown schemas with `DOCUMENTATION` evidence |
 
 ## Operation map

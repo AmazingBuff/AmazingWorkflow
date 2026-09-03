@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:lightweight-coding-workflow:evidence-packet-schema:1.1",
-  "title": "Scout Evidence Packet",
+  "$id": "urn:lightweight-coding-workflow:evidence-packet-schema:2.0",
+  "title": "PLAN Evidence Task Packet",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -9,6 +9,7 @@
     "packet_type",
     "plan_id",
     "task_id",
+    "task_kind",
     "status",
     "summary",
     "findings",
@@ -20,7 +21,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.1"
+      "const": "2.0"
     },
     "packet_type": {
       "const": "subagent-result"
@@ -30,6 +31,14 @@
     },
     "task_id": {
       "$ref": "#/$defs/identifier"
+    },
+    "task_kind": {
+      "enum": [
+        "requirement-research",
+        "repository-read",
+        "dependency-check",
+        "evidence-analysis"
+      ]
     },
     "status": {
       "enum": [

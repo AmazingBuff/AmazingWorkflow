@@ -1,130 +1,171 @@
-# Context Routing
+# PLAN Context Routing
 
-Contract version: `0.6` (part of the Core protocol at the same version).
+Contract version: `0.7` (part of the Core protocol at the same version).
 
-This reference integrates context-efficient orchestration into Phase 1 planning. It defines when the Planner delegates read-only discovery to scout subagents, how sources are routed by information boundary, how the approved contract inherits precise locators so the implementation worker does not re-discover them, and which model each role runs on. The orchestration layer is scaffolding for planning; the approved contract remains the sole implementation authority.
+This reference defines how the main Planner chooses direct handling, one
+minimal micro Evidence Task, or a validated batch of independent read-only
+Evidence Tasks. Routing is PLAN scaffolding; the approved implementation
+contract remains the sole WORK authority.
 
-The effective routing and budget source is `assets/context-routing/default-config.yaml`. A plan records that source's revision and digest plus a resolved budget snapshot. Every mode-profile budget is a maximum, so a plan may select lower limits; `max_total_dispatched_tokens` is the selected maximum for the whole dispatch. The actual approved `discovery_authorization.token_ceiling` includes declared expansion allowances and must satisfy `worst_case_total_input_tokens <= token_ceiling <= max_total_dispatched_tokens`. `scripts/validate_plan.py` checks the snapshot and routing decision, and `scripts/check_contract_parity.py` checks the schema, validator, configuration, packet envelope, and Scout Agent for drift. The Python validator is the semantic validation authority; the JSON Schemas are checked mirrors.
+The effective configuration is
+`assets/context-routing/default-config.yaml`. A routing record copies its
+revision and digest and records a resolved policy snapshot. The semantic
+authority is `scripts/validate_plan.py`; the JSON schema and
+`scripts/check_contract_parity.py` are checked mirrors. The full field shapes
+are in [orchestration-contracts.md](orchestration-contracts.md).
 
-The scout orchestration field contracts (source descriptor, shared fact, plan, task packet, expansion request, evidence packet) live in [orchestration-contracts.md](orchestration-contracts.md). This reference defines when and why they are used; that reference defines their exact shape.
+## Two-phase and task-capability invariants
 
-## Core invariants
+- The only public control phases are `PLAN` and `WORK`.
+- Direct inspection and read-only task Agents are activities inside PLAN, not
+  a third phase and not planning workers.
+- The main Planner owns requirements, routing, user interaction, approval,
+  contract authoring, conflict adjudication, and final reporting.
+- PLAN task Agents return validated Evidence Packets. They do not decide
+  scope, author or approve contracts, write files, mutate external systems,
+  or spawn Agents.
+- WORK retains exactly one user-approved implementation Agent for all writes,
+  verification, and in-scope repair.
 
-- Scouting belongs to Phase 1. It never writes product code, never changes requirements, and never replaces Planner judgment.
-- A scout is not a planning worker. It returns evidence packets with locators; the Planner remains the only decision-maker and the only agent talking to the user.
-- No scout is dispatched before the routing decision is made, and no scout runs after the contract is approved except optional read-only verification collection.
-- No scout is dispatched before an explicit discovery authorization records the exact scout model, packet count, and token ceiling. The authorization is a planning gate, not a worker permission.
-- The orchestration plan is disposable scaffolding. Only its evidence locators and confirmed facts survive into the contract.
-- Scout model selection is explicit and user-visible, exactly like implementation-model selection. It defaults to a cheaper model but the user can override it.
-- All scout reads respect the same read-only discipline as Planner inspection.
-- The Scout Agent runs in a host-enforced read-only sandbox and may use only `deny` or Planner-mediated `request` expansion.
+## Supported task kinds
 
-## Model routing policy
+The stable Agent id `lightweight_scout` is the task-scoped read-only Evidence
+Task Agent. It accepts exactly:
 
-Each role has a cost tier. The Planner assigns tiers when preparing the routing decision and records the exact scout model in the proposal and discovery authorization.
+- `requirement-research`
+- `repository-read`
+- `dependency-check`
+- `evidence-analysis`
 
-| Role | Default tier | Responsibility |
-| --- | --- | --- |
-| Planner (main task) | Expensive, user's current model | Requirement decomposition, routing decision, contract authoring, conflict adjudication, final report. |
-| Scout subagent | Cheap, explicit user-approved model | Inventory, locate, materialize assigned selectors, produce evidence packets. |
-| Implementation worker | User-approved implementation model | Product-code writes under the approved contract. |
+The `implementation` task kind belongs only to WORK and is rejected by PLAN
+and Evidence Packet validators. Every PLAN task declares one kind, one
+objective, exact source descriptors or query, a budget, stop conditions, and
+the Evidence Packet response contract.
 
-Rules:
+## Context-economics routing
 
-- The Planner never offloads contract authoring or approval decisions to a scout.
-- The scout model must be validated through the host adapter before dispatch, using the same validation rules as the implementation model. If the host cannot represent a cheaper scout model, the Planner falls back to direct inspection and says so in the proposal.
-- A cheap model that repeatedly produces weak Evidence Packets is a routing failure, not a contract problem; return to the routing decision rather than expanding the scout's scope.
+The routing decision is not gated by a minimum file count or token count. The
+Planner estimates:
 
-## Routing decision and the small-task fast lane
+- `planner_context_savings`: context removed from the main Planner;
+- `delegated_input_tokens`: task input, including the assigned source estimate;
+- `estimated_result_tokens`: compact evidence returned to the Planner;
+- `coordination_overhead_tokens`: packet, dispatch, and merge overhead;
+- `weighted_cost_savings`: an estimated model-weighted cost delta; and
+- `weighted_cost_rationale`: why the estimate is credible and that total-token
+  savings are not being claimed.
 
-The Planner makes one routing decision at the start of Phase 1, after understanding the request but before repository inspection:
+Delegation is beneficial when the task is independently describable and either
+Planner-context savings exceed coordination overhead or weighted-cost savings
+are positive. This is a planning estimate, not a billing measurement. A
+subagent can increase total tokens while reducing the Planner's context load.
+Never report total-token savings without measured evidence.
 
-1. **Fast lane** (direct inspection): the Planner reads the repository itself with read-only tools. No orchestration plan, no scouts, no packets.
-2. **Orchestrated lane**: build an orchestration plan, validate it, generate scout task packets, dispatch read-only scouts, merge evidence packets.
+Use the following decision policy:
 
-Enter the orchestrated lane only when at least one condition holds, using the thresholds in the effective default configuration:
+1. `direct` when evidence is already present, the evidence is tiny, or the
+   work requires continuous Planner judgment; direct is also the safe fallback
+   when the economics are not positive.
+2. `micro` when exactly one bounded evidence task clears the economics gate,
+   even when it covers one file or one question. A micro envelope is standalone
+   and does not require a full orchestration plan.
+3. `batch` when multiple independent tasks, distinct information boundaries,
+   or deliberate duplicate review clear the economics gate. Batch uses the
+   full plan, source routing, dependency layers, packets, and Evidence Packet
+   merge.
 
-- Estimated discovery surface exceeds **5 files** or **8,000 estimated tokens**.
-- The task spans multiple modules or subsystems with distinct information boundaries.
-- Independent verification of specific claims is worth deliberate duplicate reading.
-- A single context would mix unrelated evidence and degrade planning quality.
+The executable `choose_routing` helper in `scripts/validate_plan.py` applies
+this policy. A direct choice may be recorded even when delegation would be
+economically positive; the validator reports that as a review warning rather
+than forcing delegation.
 
-Otherwise use the fast lane. These thresholds are starting points: tune them from measured runs and record adjusted values in project configuration. When in doubt, prefer the fast lane; orchestration overhead on a small task exceeds what it saves.
+## Pre-authorized Codex PLAN-task policy
 
-The routing decision, its basis, and (for the orchestrated lane) the exact scout model, packet count, and token ceiling are presented in the proposal so the user sees the cost shape before explicitly authorizing discovery.
+Codex's in-policy PLAN task defaults are:
 
-## Orchestrated lane workflow
+- `gpt-5.6-luna` with reasoning effort `max`;
+- at most two concurrent read-only tasks;
+- at most 12,000 estimated input tokens per PLAN round;
+- no complete parent transcript;
+- host-enforced read-only sandbox, no writes, and no external mutations;
+- one user-visible dispatch notice; and
+- no per-task approval while the policy is not exceeded.
 
-### 1. Inventory before reading
+Exceeding a limit requires explicit user approval or direct PLAN fallback. The
+adapter validates the exact model and reasoning effort; the host-neutral
+configuration does not authorize a model substitution.
 
-Use directory listings, symbol indexes, headings, manifests, and metadata first. The Planner does not bulk-read sources merely to decide who should read them. Follow the source-descriptor rules in [orchestration-contracts.md](orchestration-contracts.md): stable IDs, narrow selectors (symbol > line range > small file > whole file), estimated token counts.
+## Routing records
 
-### 2. Decompose by information boundary
+### Direct
 
-Split scout tasks around the smallest evidence set that supports a planning conclusion: module, subsystem, claim, or failure-mode boundaries. Each task gets one objective, assigned source IDs, required questions, `deny`-or-`request` expansion (scouts may not self-expand), and stop conditions. `request` means the scout may report a missing source; it never grants permission to read it.
+A direct `routing-decision` record contains the goal and economics only. It
+does not contain task packets, source bytes, or a full orchestration plan.
 
-### 3. Validate and build packets
+### Micro
+
+A micro envelope contains one task id and supported task kind, one exact query,
+one or more source descriptors, objective, deliverable, stop conditions,
+allowed expansion, input/result budgets, economics, policy and authorization
+snapshots, read-only execution rules, and the Evidence Packet response
+contract. It never carries the complete parent transcript.
+
+Validate a micro envelope with:
 
 ```bash
-python scripts/validate_plan.py path/to/plan.json
-python scripts/build_task_packets.py path/to/plan.json --out path/to/packets
+python scripts/validate_plan.py path/to/micro-task.json
+python scripts/build_task_packets.py path/to/micro-task.json --out path/to/packets
 ```
 
-Store both under the task-record directory (for example `.codex/task-runs/<task-id>/`). The plan must contain an authorized `discovery_authorization` object whose `scout_model`, `packet_count`, and `token_ceiling` match the validated dispatch. Fix validation errors; treat overlap warnings as prompts to narrow scope.
+The builder emits one packet and a manifest; it does not create a batch plan.
 
-### 4. Dispatch scouts
+### Batch
 
-Dispatch through the host adapter's `read_only_scout_dispatch` capability when the adapter provides one (protocol `0.6`), and only after the discovery authorization gate passes. Without that optional capability the orchestrated lane degrades to direct inspection: the Planner materializes each packet's assigned selectors itself and keeps the evidence in its own context. Never bypass the adapter to spawn scouts. An older, incompatible adapter cannot be used as a fast-lane substitute; only a same-version adapter lacking the optional capability gets this restriction.
+A batch plan records source descriptors, shared facts, task kinds, dependencies,
+expansion policy, budgets, economics, authorization, and merge checks. The
+Planner validates and builds packets before any optional adapter dispatch:
 
-Give each scout: the task packet, materialized source fragments (or instructions to read exactly the assigned selectors when the host enforces read-only subagents), the Evidence Packet contract, and the exact authorized scout model.
+```bash
+python scripts/validate_plan.py path/to/batch-plan.json
+python scripts/build_task_packets.py path/to/batch-plan.json --out path/to/packets
+```
 
-### 5. Merge evidence into planning
+Dependency-free tasks may run concurrently, but no dispatch layer may exceed
+two tasks under the Codex policy. The Planner materializes only assigned source
+selectors after packet generation and replaces upstream placeholders with
+compact dependency summaries. It never attaches the complete parent
+transcript.
 
-The Planner merges evidence packets by claim and locator, deduplicates facts, resolves conflicts by preferring direct evidence over summaries, and records remaining uncertainty. Conflicting material claims trigger at most one narrow re-read, not a full re-dispatch.
+`--overwrite` may replace only packet files authenticated by a matching
+generated manifest. Unrelated or unauthenticated files fail before deletion.
 
-### 6. Hand locators to the contract
+## Optional adapter dispatch and verification gate
 
-Requirements, allowed paths, and acceptance criteria in the contract should reference surviving locators (`path:symbol`, `path:section`, `path:object`, or `path:lines a-b` only when necessary) so the implementation worker starts from precise coordinates instead of re-discovering them. Record a source revision or content digest when a locator can become stale. The contract's Discovery section records the routing decision, authorization values, dispatched state, and measured token spend.
+An adapter may expose `read_only_scout_dispatch` as the historical metadata
+name for task-scoped PLAN dispatch. It must enforce the task envelope, exact
+selectors/query, policy limits, model selection, read-only permissions, and
+Evidence Packet relay. An adapter without the optional capability uses direct
+PLAN handling; it must not bypass the adapter to spawn a task.
 
-## Fast lane workflow
+The Codex reference contains a mapping promoted by the parent Planner's live
+`gpt-5.6-luna/max` forward test. That evidence proves task isolation, explicit
+model selection, lossless Evidence Packet relay, and identical pre/post source
+worktree state for one micro repository-read task. Documentation alone is not
+evidence; expansion, batch scheduling, and other host surfaces retain their
+own verification boundaries. Direct handling remains the fallback when the
+verified mechanism is unavailable or policy limits are exceeded.
 
-The Planner inspects directly with read-only tools, reads only what the routing decision identified as necessary, and records the inspected surface in the contract's Discovery section with `routing: direct`. No plan JSON or packets are created. A same-version adapter without `read_only_scout_dispatch` always uses this lane. If mid-planning the discovery surface grows past the thresholds, stop, make a fresh routing decision, and tell the user the cost shape changed.
+## Evidence and compatibility
 
-## Progressive reference loading
+Evidence Packets use schema `2.0` and
+`scripts/validate_evidence_packet.py`. Every material finding cites a source
+id and precise locator. The response contract specifies finding severity
+`low|medium|high|critical`, finding confidence `low|medium|high`, fact fields
+`id|statement|provenance|confidence`, and fact confidence
+`confirmed|inferred|unverified`. Expansion requests are proposals; only
+Planner-approved requests may appear in `expansions_used`, and `deny` tasks
+cannot expand.
 
-Load only the references needed for the current lane and impact:
-
-- Always before adapter approval or implementation: `protocol.md`, `adapter-contract.md`, and the one selected adapter reference.
-- Before the routing decision: this reference and `assets/context-routing/default-config.yaml`; use `estimate_tokens.py` only when a host tokenizer is unavailable.
-- Only for the orchestrated lane: `orchestration-contracts.md`, the plan and Evidence Packet schemas, `validate_plan.py`, `build_task_packets.py`, and `validate_evidence_packet.py`.
-- Only for Git-backed work: `git-commit-convention.md`.
-- Only when Documentation Impact is `create` or `update`: `feature-documentation-convention.md` and, for creation, `assets/feature-document.md`.
-- Only when authoring or promoting an adapter: the adapter-authoring template and its verification material.
-
-Fast-lane startup therefore does not require orchestration-only, Git-only, documentation-only, or adapter-authoring references before those decisions are relevant. Loading less does not waive any later approval, documentation, compatibility, safety, or single-writer obligation.
-
-## Instruction hierarchy
-
-If the standalone `context-efficient-agent-orchestrator` skill (a general-purpose, non-coding orchestration skill distributed separately) is also loaded:
-
-1. The two-phase Core invariants (single Planner, single writer, two phases, approval gates) always win.
-2. This reference defines the coding-specific binding (routing decision, model tiers, fast lane, locator handoff).
-3. The standalone skill's general rules apply only where neither this reference nor [orchestration-contracts.md](orchestration-contracts.md) covers the same ground; on any conflict the local contracts win for coding tasks.
-
-The standalone skill is not a runtime dependency of this workflow: nothing here requires it to be installed. Its multi-writer or review-dispatch patterns are out of scope here: implementation-phase fan-out beyond the single approved worker is forbidden by the Core protocol.
-
-## Fact routing rule (bound from [orchestration-contracts.md](orchestration-contracts.md))
-
-A shared fact is delivered only to tasks whose assigned sources intersect the fact's provenance. Facts with empty provenance or `always_share: true` reach every task. Because facts that survive into the contract become requirement evidence, the Planner must check that every contract-relevant fact was actually delivered to the task that produced the supporting evidence, and mark contract-critical facts `always_share: true` when in doubt.
-
-## Evidence Packet validation
-
-`assets/context-routing/evidence-packet.schema.json` defines the JSON shape and `scripts/validate_evidence_packet.py` is the executable validator. A packet must use schema version `1.1`, identify its plan and task, cite known source IDs when a plan is supplied, explain missing information for `partial` or `blocked` results, and mark every used expansion `planner_approved: true`. Any forbidden expansion mode is rejected. The generated task packet carries this same schema reference and validation-authority name.
-
-## Token estimation
-
-Use `scripts/estimate_tokens.py` when a host tokenizer is unavailable. It counts CJK characters near one token each and other text near four characters per token. Estimates gate the routing decision and the budget; treat them as planning guidance, not billing truth.
-
-## Output behavior
-
-The orchestrated lane produces, under the task-record directory: `orchestration-plan.json`, scout packets, the packet manifest, and Evidence Packets as they return. The contract's Discovery section summarizes: routing decision and basis, explicit authorization, scout model, estimated and measured token spend, and the evidence-locator index. When no scheduler executed the plan, the Discovery section must say `dispatched: no` and the proposal must not claim scouting occurred.
+Workflow `0.7.0` and Protocol `0.7` use schema/config revision `2.0`/`2`.
+Approved `0.6.x` contracts are immutable and continue only with their matching
+historical resources; they are not silently migrated by this reference.

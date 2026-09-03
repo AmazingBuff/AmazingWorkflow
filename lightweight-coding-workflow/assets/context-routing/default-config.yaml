@@ -1,17 +1,21 @@
-schema_version: "1.1"
+schema_version: "2.0"
 active_mode: balanced
 config_id: context-routing-defaults
-config_revision: 1
+config_revision: 2
 
-# Canonical effective defaults for the lightweight-coding-workflow Context
-# Routing reference. validate_plan.py reads this file; a plan records its
-# revision and digest plus a checked resolved budget snapshot.
+# Canonical effective defaults for the lightweight-coding-workflow PLAN task
+# routing reference. validate_plan.py reads this file; a plan records its
+# revision, digest, economics, and checked policy snapshot.
 
-routing_gate:
-  # Enter the orchestrated lane above either threshold or when boundaries are
-  # distinct; otherwise use the fast lane (direct Planner inspection).
-  max_files_direct: 5
-  max_estimated_tokens_direct: 8000
+routing_policy:
+  # Context economics, not a file/token minimum, chooses direct, micro, or
+  # batch handling. These are decision hints; each plan records its estimates.
+  allowed_decisions: ["direct", "micro", "batch"]
+  decision_basis: "context-economics"
+  coordination_overhead_tokens: 200
+  direct_preferences: ["evidence-already-present", "tiny-evidence", "continuous-planner-judgment"]
+  micro_max_tasks: 1
+  batch_min_tasks: 2
 
 mode_profiles:
   # Every budget value in a profile is a maximum. Plans may select lower
@@ -53,22 +57,38 @@ mode_profiles:
     default_expansion_tokens: 4000
 
 scout_policy:
-  # Scouts are read-only Phase 1 workers. A request-mode expansion is read
-  # only after explicit Planner approval.
+  # The stable lightweight_scout id now names a task-scoped Evidence Task
+  # Agent. A request-mode expansion is read only after Planner approval.
   allowed_expansion_modes: ["deny", "request"]
   planner_approval_required_for_request: true
   sandbox_mode: "read-only"
   pass_parent_transcript: false
-  response_schema_version: "1.1"
+  response_schema_version: "2.0"
   return_contract: "evidence-packet"
+  agent_id: "lightweight_scout"
+  task_kinds: ["dependency-check", "evidence-analysis", "repository-read", "requirement-research"]
+
+plan_task_policy:
+  # Pre-authorized Codex PLAN-task defaults. The adapter must validate the
+  # exact model and effort before dispatch; other hosts may use direct PLAN
+  # handling when they cannot represent this policy.
+  model: "gpt-5.6-luna"
+  reasoning_effort: "max"
+  max_concurrent_tasks: 2
+  max_estimated_input_tokens_per_round: 12000
+  pass_parent_transcript: false
+  sandbox_mode: "read-only"
+  allow_writes: false
+  allow_external_mutations: false
+  user_visible_dispatch_notice: true
+  per_task_approval_required: false
+  over_policy: "user-approval-or-direct-fallback"
 
 model_routing:
-  # Tiers are defaults, not silent choices. This host-neutral config contains
-  # no exact scout model; authorization supplies one through the selected
-  # adapter and validation occurs before dispatch. The approved token ceiling
-  # may be lower than max_total_dispatched_tokens but may not be below the
-  # worst-case dispatched input including expansion allowances.
+  # The Planner remains the only decision maker. PLAN task model/effort and
+  # policy are explicit in the authorization; WORK keeps its separate
+  # user-approved implementation model.
   planner_tier: "expensive (current main-task model)"
-  scout_tier: "cheap (user-approved override allowed)"
-  scout_model_source: "explicit user authorization through the selected adapter"
+  plan_task_tier: "pre-authorized Codex Luna/max within policy"
+  plan_task_model_source: "explicit policy plus adapter validation"
   implementer_tier: "user-approved implementation model"

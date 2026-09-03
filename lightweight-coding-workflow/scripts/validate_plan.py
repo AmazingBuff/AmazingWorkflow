@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Validate a context-routing scout orchestration plan.
+"""Validate PLAN routing records and read-only task envelopes.
 
 The validator uses only the Python standard library. It checks the effective
-configuration digest, explicit discovery authorization, structure, source
-references, dependency cycles, token budgets, expansion policy, and accidental
-source overlap. Token estimates are planning approximations, not billing
-truth; the estimator weights CJK characters near one token per character and
-other text near four characters per token.
+configuration digest, explicit PLAN-task authorization, structure, source
+references, dependency cycles, token budgets, task capability, expansion
+policy, and accidental source overlap. Token estimates are planning
+approximations, not billing truth; the estimator weights CJK characters near
+one token per character and other text near four characters per token.
 
 Text-resource digests are computed from canonical UTF-8/LF content: UTF-8 text
 is decoded, CRLF and lone CR line endings become LF, the text is re-encoded as
@@ -28,11 +28,64 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-SUPPORTED_SCHEMA_VERSION = "1.1"
+SUPPORTED_SCHEMA_VERSION = "2.0"
 DEFAULT_CONFIG_RELATIVE_PATH = Path("assets/context-routing/default-config.yaml")
 VALID_MODES = {"lean", "balanced", "independent-review", "high-assurance"}
 VALID_CONFIDENCE = {"confirmed", "inferred", "unverified"}
 VALID_EXPANSION_MODES = {"deny", "request"}
+VALID_ROUTING_DECISIONS = {"direct", "micro", "batch"}
+READ_ONLY_TASK_KINDS = {
+    "requirement-research",
+    "repository-read",
+    "dependency-check",
+    "evidence-analysis",
+}
+IMPLEMENTATION_TASK_KIND = "implementation"
+VALID_TASK_KINDS = {*READ_ONLY_TASK_KINDS, IMPLEMENTATION_TASK_KIND}
+PLAN_TASK_MODEL = "gpt-5.6-luna"
+PLAN_TASK_REASONING_EFFORT = "max"
+PLAN_TASK_MAX_CONCURRENT = 2
+PLAN_TASK_MAX_INPUT_TOKENS_PER_ROUND = 12000
+REQUIRED_ECONOMICS_FIELDS = {
+    "planner_context_savings",
+    "delegated_input_tokens",
+    "estimated_result_tokens",
+    "coordination_overhead_tokens",
+    "weighted_cost_savings",
+    "weighted_cost_rationale",
+    "independently_describable",
+    "evidence_already_present",
+    "continuous_planner_judgment",
+}
+REQUIRED_PLAN_TASK_POLICY_FIELDS = {
+    "model",
+    "reasoning_effort",
+    "max_concurrent_tasks",
+    "max_estimated_input_tokens_per_round",
+    "pass_parent_transcript",
+    "sandbox_mode",
+    "allow_writes",
+    "allow_external_mutations",
+    "user_visible_dispatch_notice",
+    "per_task_approval_required",
+    "over_policy",
+}
+REQUIRED_PLAN_TASK_AUTHORIZATION_FIELDS = {
+    "authorized",
+    "model",
+    "reasoning_effort",
+    "task_count",
+    "token_ceiling",
+}
+REQUIRED_MODEL_OVERRIDE_FIELDS = {"model", "reasoning_effort", "explicit"}
+EVIDENCE_PACKET_EVIDENCE_FIELDS = ["source_id", "locator", "note"]
+EVIDENCE_PACKET_FACT_FIELDS = ["id", "statement", "provenance", "confidence"]
+EVIDENCE_PACKET_FINDING_SEVERITIES = {"low", "medium", "high", "critical"}
+EVIDENCE_PACKET_FINDING_CONFIDENCE = {"low", "medium", "high"}
+EVIDENCE_PACKET_FACT_CONFIDENCE = {"confirmed", "inferred", "unverified"}
+EVIDENCE_PACKET_FINDING_SEVERITY_VALUES = ["low", "medium", "high", "critical"]
+EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES = ["low", "medium", "high"]
+EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES = ["confirmed", "inferred", "unverified"]
 VALID_SELECTOR_TYPES = {
     "lines",
     "pages",
@@ -46,6 +99,7 @@ ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 CJK_PATTERN = re.compile(r"[\u2e80-\u9fff\u3040-\u30ff\uac00-\ud7af\uf900-\ufaff]")
 REQUIRED_TASK_FIELDS = {
     "id",
+    "task_kind",
     "agent_role",
     "objective",
     "dependencies",
@@ -67,13 +121,15 @@ REQUIRED_BUDGET_FIELDS = {
     "max_shared_source_tokens_per_task",
 }
 REQUIRED_TOP_LEVEL_FIELDS = {
+    "envelope_type",
     "schema_version",
     "plan_id",
     "goal",
     "mode",
     "configuration",
     "routing",
-    "discovery_authorization",
+    "plan_task_authorization",
+    "plan_task_policy",
     "budget",
     "shared_context",
     "sources",
@@ -170,9 +226,10 @@ def load_effective_config(path: Path | None = None) -> dict[str, Any]:
         "schema_version",
         "config_id",
         "config_revision",
-        "routing_gate",
+        "routing_policy",
         "mode_profiles",
         "scout_policy",
+        "plan_task_policy",
     }
     missing = sorted(required - set(config))
     if missing:
@@ -255,6 +312,517 @@ def is_non_empty_string(value: Any) -> bool:
 
 def valid_id(value: Any) -> bool:
     return is_non_empty_string(value) and bool(ID_PATTERN.fullmatch(value))
+
+
+def _validate_integer(
+    value: Any, path: str, errors: list[str], *, minimum: int = 0
+) -> bool:
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+        errors.append(f"{path} must be an integer >= {minimum}")
+        return False
+    return True
+
+
+def _validate_boolean(value: Any, path: str, errors: list[str]) -> bool:
+    if not isinstance(value, bool):
+        errors.append(f"{path} must be a boolean")
+        return False
+    return True
+
+
+def validate_economics(
+    economics: Any,
+    path: str,
+    errors: list[str],
+    *,
+    require_benefit: bool,
+) -> dict[str, Any]:
+    """Validate the context-economics record used for routing decisions."""
+    if not isinstance(economics, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+
+    missing = sorted(REQUIRED_ECONOMICS_FIELDS - set(economics))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+
+    for field in (
+        "planner_context_savings",
+        "delegated_input_tokens",
+        "estimated_result_tokens",
+        "coordination_overhead_tokens",
+    ):
+        _validate_integer(economics.get(field), f"{path}.{field}", errors)
+
+    weighted_cost_savings = economics.get("weighted_cost_savings")
+    if (
+        not isinstance(weighted_cost_savings, (int, float))
+        or isinstance(weighted_cost_savings, bool)
+        or not math.isfinite(float(weighted_cost_savings))
+    ):
+        errors.append(f"{path}.weighted_cost_savings must be a finite number")
+
+    if not is_non_empty_string(economics.get("weighted_cost_rationale")):
+        errors.append(f"{path}.weighted_cost_rationale must be a non-empty string")
+
+    for field in (
+        "independently_describable",
+        "evidence_already_present",
+        "continuous_planner_judgment",
+    ):
+        _validate_boolean(economics.get(field), f"{path}.{field}", errors)
+
+    if "total_token_savings" in economics or "total_tokens_saved" in economics:
+        errors.append(
+            f"{path} must not claim total-token savings; use measured evidence outside the routing estimate"
+        )
+    if "total_token_savings_claimed" in economics and economics.get(
+        "total_token_savings_claimed"
+    ) is not False:
+        errors.append(
+            f"{path}.total_token_savings_claimed must be false; total-token savings are not inferred"
+        )
+
+    if require_benefit and not delegation_is_beneficial(economics):
+        errors.append(
+            f"{path} must show Planner-context savings above coordination overhead "
+            "or positive weighted-cost savings for delegation"
+        )
+    return economics
+
+
+def delegation_is_beneficial(economics: dict[str, Any]) -> bool:
+    """Return whether a bounded task clears the documented delegation gate."""
+    context_savings = economics.get("planner_context_savings")
+    coordination_overhead = economics.get("coordination_overhead_tokens")
+    weighted_cost_savings = economics.get("weighted_cost_savings")
+    return (
+        isinstance(context_savings, int)
+        and not isinstance(context_savings, bool)
+        and isinstance(coordination_overhead, int)
+        and not isinstance(coordination_overhead, bool)
+        and context_savings > coordination_overhead
+    ) or (
+        isinstance(weighted_cost_savings, (int, float))
+        and not isinstance(weighted_cost_savings, bool)
+        and math.isfinite(float(weighted_cost_savings))
+        and weighted_cost_savings > 0
+    )
+
+
+def choose_routing(
+    economics: dict[str, Any], *, task_count: int = 1, multiple_information_boundaries: bool = False
+) -> str:
+    """Choose direct, micro, or batch PLAN handling from bounded economics."""
+    if (
+        economics.get("evidence_already_present") is True
+        or economics.get("continuous_planner_judgment") is True
+        or economics.get("independently_describable") is not True
+        or not delegation_is_beneficial(economics)
+    ):
+        return "direct"
+    if task_count > 1 or multiple_information_boundaries:
+        return "batch"
+    return "micro"
+
+
+def _validate_expansion_policy(
+    expansion: Any, path: str, errors: list[str]
+) -> dict[str, Any]:
+    if not isinstance(expansion, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    mode = expansion.get("mode")
+    if mode not in VALID_EXPANSION_MODES:
+        errors.append(
+            f"{path}.mode must be one of {sorted(VALID_EXPANSION_MODES)}"
+        )
+    additional = expansion.get("max_additional_tokens")
+    _validate_integer(additional, f"{path}.max_additional_tokens", errors)
+    if mode == "deny" and additional not in {0, None}:
+        errors.append(
+            f"{path}.max_additional_tokens must be 0 when expansion mode is deny"
+        )
+    if mode == "request" and additional == 0:
+        errors.append(
+            f"{path}.max_additional_tokens must be greater than 0 when expansion mode is request"
+        )
+    return expansion
+
+
+def _validate_plan_task_policy(
+    policy: Any, path: str, errors: list[str]
+) -> dict[str, Any]:
+    if not isinstance(policy, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    missing = sorted(REQUIRED_PLAN_TASK_POLICY_FIELDS - set(policy))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+
+    expected_strings = {
+        "model": PLAN_TASK_MODEL,
+        "reasoning_effort": PLAN_TASK_REASONING_EFFORT,
+        "sandbox_mode": "read-only",
+        "over_policy": "user-approval-or-direct-fallback",
+    }
+    for field, expected in expected_strings.items():
+        if policy.get(field) != expected:
+            errors.append(
+                f"{path}.{field} must be exactly {expected!r} for the pre-authorized Codex PLAN-task policy"
+            )
+
+    for field, expected in {
+        "max_concurrent_tasks": PLAN_TASK_MAX_CONCURRENT,
+        "max_estimated_input_tokens_per_round": PLAN_TASK_MAX_INPUT_TOKENS_PER_ROUND,
+    }.items():
+        if policy.get(field) != expected:
+            errors.append(f"{path}.{field} must be exactly {expected}")
+
+    for field in (
+        "pass_parent_transcript",
+        "allow_writes",
+        "allow_external_mutations",
+        "user_visible_dispatch_notice",
+        "per_task_approval_required",
+    ):
+        _validate_boolean(policy.get(field), f"{path}.{field}", errors)
+
+    if policy.get("pass_parent_transcript") is not False:
+        errors.append(f"{path}.pass_parent_transcript must be false")
+    for field in ("allow_writes", "allow_external_mutations"):
+        if policy.get(field) is not False:
+            errors.append(f"{path}.{field} must be false")
+    if policy.get("user_visible_dispatch_notice") is not True:
+        errors.append(f"{path}.user_visible_dispatch_notice must be true")
+    if policy.get("per_task_approval_required") is not False:
+        errors.append(f"{path}.per_task_approval_required must be false within policy")
+    return policy
+
+
+def _validate_plan_task_authorization(
+    authorization: Any,
+    path: str,
+    errors: list[str],
+    *,
+    expected_task_count: int,
+    policy: dict[str, Any],
+    token_ceiling: int | None = None,
+) -> dict[str, Any]:
+    if not isinstance(authorization, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    missing = sorted(REQUIRED_PLAN_TASK_AUTHORIZATION_FIELDS - set(authorization))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+    if authorization.get("authorized") is not True:
+        errors.append(f"{path}.authorized must be true")
+    if authorization.get("model") != PLAN_TASK_MODEL:
+        errors.append(f"{path}.model must be exactly {PLAN_TASK_MODEL!r}")
+    if authorization.get("reasoning_effort") != PLAN_TASK_REASONING_EFFORT:
+        errors.append(
+            f"{path}.reasoning_effort must be exactly {PLAN_TASK_REASONING_EFFORT!r}"
+        )
+    if authorization.get("task_count") != expected_task_count:
+        errors.append(
+            f"{path}.task_count must equal the number of dispatched PLAN tasks ({expected_task_count})"
+        )
+    if not _validate_integer(authorization.get("token_ceiling"), f"{path}.token_ceiling", errors, minimum=1):
+        return authorization
+    ceiling = authorization["token_ceiling"]
+    maximum = policy.get("max_estimated_input_tokens_per_round")
+    if isinstance(maximum, int) and ceiling > maximum:
+        errors.append(
+            f"{path}.token_ceiling must not exceed the PLAN-task policy ceiling {maximum}"
+        )
+    if token_ceiling is not None and ceiling > token_ceiling:
+        errors.append(f"{path}.token_ceiling must not exceed {token_ceiling}")
+    return authorization
+
+
+def _validate_model_override(
+    model_override: Any, path: str, errors: list[str]
+) -> dict[str, Any]:
+    if not isinstance(model_override, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    missing = sorted(REQUIRED_MODEL_OVERRIDE_FIELDS - set(model_override))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+    if model_override.get("model") != PLAN_TASK_MODEL:
+        errors.append(f"{path}.model must be exactly {PLAN_TASK_MODEL!r}")
+    if model_override.get("reasoning_effort") != PLAN_TASK_REASONING_EFFORT:
+        errors.append(
+            f"{path}.reasoning_effort must be exactly {PLAN_TASK_REASONING_EFFORT!r}"
+        )
+    if model_override.get("explicit") is not True:
+        errors.append(f"{path}.explicit must be true for each PLAN task")
+    return model_override
+
+
+def _validate_source_descriptors(
+    sources_value: Any,
+    path: str,
+    errors: list[str],
+    *,
+    require_one: bool,
+) -> dict[str, dict[str, Any]]:
+    if not isinstance(sources_value, list):
+        errors.append(f"{path} must be an array")
+        return {}
+    if require_one and not sources_value:
+        errors.append(f"{path} must contain at least one source descriptor")
+    sources: dict[str, dict[str, Any]] = {}
+    for index, source in enumerate(sources_value):
+        source_path = f"{path}[{index}]"
+        if not isinstance(source, dict):
+            errors.append(f"{source_path} must be an object")
+            continue
+        source_id = source.get("id")
+        if not valid_id(source_id):
+            errors.append(f"{source_path}.id has an invalid identifier")
+            continue
+        if source_id in sources:
+            errors.append(f"duplicate source id: {source_id}")
+            continue
+        if not is_non_empty_string(source.get("uri")):
+            errors.append(f"{source_path}.uri must be a non-empty string")
+        validate_selector(source.get("selector"), f"{source_path}.selector", errors)
+        _validate_integer(
+            source.get("estimated_tokens"),
+            f"{source_path}.estimated_tokens",
+            errors,
+            minimum=1,
+        )
+        if not is_non_empty_string(source.get("purpose")):
+            errors.append(f"{source_path}.purpose must be a non-empty string")
+        sources[source_id] = source
+    return sources
+
+
+def _validate_response_contract(
+    response_contract: Any, path: str, errors: list[str]
+) -> None:
+    if not isinstance(response_contract, dict):
+        errors.append(f"{path} must be an object")
+        return
+    expected = {
+        "schema_version": SUPPORTED_SCHEMA_VERSION,
+        "packet_type": "subagent-result",
+        "schema_ref": "assets/context-routing/evidence-packet.schema.json",
+        "validation_authority": "scripts/validate_evidence_packet.py",
+    }
+    for field, value in expected.items():
+        if response_contract.get(field) != value:
+            errors.append(f"{path}.{field} must be exactly {value!r}")
+    if response_contract.get("task_kinds") != sorted(READ_ONLY_TASK_KINDS):
+        errors.append(
+            f"{path}.task_kinds must equal the supported read-only task kinds"
+        )
+    contract_values = {
+        "finding_severity_values": EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
+        "finding_confidence_values": EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES,
+        "evidence_fields": EVIDENCE_PACKET_EVIDENCE_FIELDS,
+        "fact_fields": EVIDENCE_PACKET_FACT_FIELDS,
+        "fact_confidence_values": EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+    }
+    for field, value in contract_values.items():
+        if response_contract.get(field) != value:
+            errors.append(f"{path}.{field} must be exactly {value!r}")
+
+
+def _validate_task_kind(value: Any, path: str, errors: list[str]) -> None:
+    if value not in VALID_TASK_KINDS:
+        errors.append(f"{path} must be one of {sorted(VALID_TASK_KINDS)}")
+    elif value == IMPLEMENTATION_TASK_KIND:
+        errors.append(
+            f"{path} cannot be {IMPLEMENTATION_TASK_KIND!r} in a read-only PLAN task"
+        )
+
+
+def _validate_task_execution_rules(
+    execution_rules: Any, path: str, errors: list[str]
+) -> None:
+    if not isinstance(execution_rules, dict):
+        errors.append(f"{path} must be an object")
+        return
+    expected = {
+        "read_only": True,
+        "write_authority": "none",
+        "external_mutations": "forbidden",
+        "pass_parent_transcript": False,
+        "may_make_decisions": False,
+        "may_author_contract": False,
+        "may_spawn_agents": False,
+    }
+    for field, value in expected.items():
+        if execution_rules.get(field) != value:
+            errors.append(f"{path}.{field} must be exactly {value!r}")
+
+
+def validate_direct_routing(
+    record: dict[str, Any], config_path: Path | None = None
+) -> dict[str, Any]:
+    """Validate a minimal direct-handling routing record."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    if record.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
+        errors.append(f"schema_version must be exactly {SUPPORTED_SCHEMA_VERSION!r}")
+    if record.get("envelope_type") != "routing-decision":
+        errors.append("envelope_type must be 'routing-decision' for direct handling")
+    if not valid_id(record.get("plan_id")):
+        errors.append("plan_id has an invalid identifier")
+    if not is_non_empty_string(record.get("goal")):
+        errors.append("goal must be a non-empty string")
+    routing = record.get("routing")
+    if not isinstance(routing, dict):
+        errors.append("routing must be an object")
+        routing = {}
+    if routing.get("decision") != "direct":
+        errors.append("routing.decision must be 'direct'")
+    _validate_integer(routing.get("estimated_files"), "routing.estimated_files", errors)
+    _validate_integer(routing.get("estimated_tokens"), "routing.estimated_tokens", errors)
+    _validate_boolean(
+        routing.get("multiple_information_boundaries"),
+        "routing.multiple_information_boundaries",
+        errors,
+    )
+    if not is_non_empty_string(routing.get("basis")):
+        errors.append("routing.basis must be a non-empty string")
+    economics = validate_economics(
+        routing.get("economics"), "routing.economics", errors, require_benefit=False
+    )
+    if choose_routing(economics) != "direct":
+        warnings.append("direct routing was selected despite positive delegation economics")
+    if "tasks" in record or "sources" in record:
+        errors.append("direct routing records must not contain task or source packet data")
+    return {
+        "valid": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "metrics": {"routing_decision": "direct"},
+    }
+
+
+def validate_micro_task(
+    envelope: dict[str, Any], config_path: Path | None = None
+) -> dict[str, Any]:
+    """Validate the minimal one-task PLAN envelope without a batch plan."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    required = {
+        "schema_version",
+        "envelope_type",
+        "plan_id",
+        "task_id",
+        "task_kind",
+        "goal",
+        "objective",
+        "query",
+        "sources",
+        "deliverable",
+        "stop_conditions",
+        "evidence_required",
+        "allowed_expansion",
+        "budget",
+        "economics",
+        "plan_task_policy",
+        "plan_task_authorization",
+        "model_override",
+        "response_contract",
+        "execution_rules",
+    }
+    missing = sorted(required - set(envelope))
+    if missing:
+        errors.append(f"micro-task envelope is missing fields: {', '.join(missing)}")
+    if envelope.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
+        errors.append(f"schema_version must be exactly {SUPPORTED_SCHEMA_VERSION!r}")
+    if envelope.get("envelope_type") != "micro-task":
+        errors.append("envelope_type must be 'micro-task'")
+    for field in ("plan_id", "task_id"):
+        if not valid_id(envelope.get(field)):
+            errors.append(f"{field} has an invalid identifier")
+    _validate_task_kind(envelope.get("task_kind"), "task_kind", errors)
+    for field in ("goal", "objective", "query", "deliverable"):
+        if not is_non_empty_string(envelope.get(field)):
+            errors.append(f"{field} must be a non-empty string")
+    validate_string_list(
+        envelope.get("stop_conditions", []), "stop_conditions", errors, allow_empty=False
+    )
+    if envelope.get("evidence_required") is not True:
+        errors.append("evidence_required must be true for an Evidence Task")
+    sources = _validate_source_descriptors(
+        envelope.get("sources"), "sources", errors, require_one=True
+    )
+    economics = validate_economics(
+        envelope.get("economics"), "economics", errors, require_benefit=True
+    )
+    policy = _validate_plan_task_policy(
+        envelope.get("plan_task_policy"), "plan_task_policy", errors
+    )
+    _validate_plan_task_authorization(
+        envelope.get("plan_task_authorization"),
+        "plan_task_authorization",
+        errors,
+        expected_task_count=1,
+        policy=policy,
+    )
+    _validate_model_override(
+        envelope.get("model_override"), "model_override", errors
+    )
+    _validate_expansion_policy(envelope.get("allowed_expansion"), "allowed_expansion", errors)
+    budget = envelope.get("budget")
+    if not isinstance(budget, dict):
+        errors.append("budget must be an object")
+        budget = {}
+    for field in ("estimated_input_tokens", "max_input_tokens", "max_result_tokens"):
+        _validate_integer(budget.get(field), f"budget.{field}", errors, minimum=1)
+    estimated_input = budget.get("estimated_input_tokens")
+    max_input = budget.get("max_input_tokens")
+    if isinstance(estimated_input, int) and isinstance(max_input, int):
+        if estimated_input > max_input:
+            errors.append("budget.estimated_input_tokens must not exceed budget.max_input_tokens")
+        if estimated_input > PLAN_TASK_MAX_INPUT_TOKENS_PER_ROUND:
+            errors.append(
+                "budget.estimated_input_tokens must not exceed the PLAN-task policy ceiling"
+            )
+    source_tokens = sum(
+        source.get("estimated_tokens", 0)
+        for source in sources.values()
+        if isinstance(source.get("estimated_tokens"), int)
+    )
+    if isinstance(estimated_input, int) and estimated_input < source_tokens:
+        errors.append("budget.estimated_input_tokens must cover assigned source estimates")
+    if isinstance(economics.get("delegated_input_tokens"), int) and isinstance(
+        estimated_input, int
+    ) and economics["delegated_input_tokens"] != estimated_input:
+        errors.append("economics.delegated_input_tokens must equal budget.estimated_input_tokens")
+    if (
+        isinstance(estimated_input, int)
+        and isinstance(envelope.get("allowed_expansion"), dict)
+        and isinstance(envelope["allowed_expansion"].get("max_additional_tokens"), int)
+        and estimated_input + envelope["allowed_expansion"]["max_additional_tokens"]
+        > PLAN_TASK_MAX_INPUT_TOKENS_PER_ROUND
+    ):
+        errors.append("micro-task worst-case input exceeds the PLAN-task policy ceiling")
+    _validate_response_contract(envelope.get("response_contract"), "response_contract", errors)
+    _validate_task_execution_rules(
+        envelope.get("execution_rules"), "execution_rules", errors
+    )
+    if choose_routing(economics) != "micro":
+        errors.append("micro-task economics and task count do not justify micro delegation")
+    return {
+        "valid": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "metrics": {
+            "routing_decision": "micro",
+            "task_count": 1,
+            "source_count": len(sources),
+            "estimated_input_tokens": budget.get("estimated_input_tokens"),
+            "estimated_result_tokens": economics.get("estimated_result_tokens"),
+        },
+    }
 
 
 def validate_string_list(
@@ -355,13 +923,23 @@ def facts_for_sources(facts: Iterable[dict[str, Any]], source_ids: set[str]) -> 
 def validate_plan(
     plan: dict[str, Any], config_path: Path | None = None
 ) -> dict[str, Any]:
-    """Validate a plan against the effective configuration.
+    """Validate a direct record, micro-task envelope, or batch PLAN.
 
     Mode-profile budget values are maximum limits, so a plan may select lower
-    values. The discovery authorization token ceiling is the actual approved
+    values. The PLAN-task authorization token ceiling is the actual approved
     ceiling and must cover the computed worst-case dispatch without exceeding
-    ``budget.max_total_dispatched_tokens``.
+    either the selected budget or the pre-authorized per-round policy.
     """
+    envelope_type = plan.get("envelope_type")
+    routing_value = plan.get("routing")
+    routing_decision = (
+        routing_value.get("decision") if isinstance(routing_value, dict) else None
+    )
+    if envelope_type == "routing-decision" or routing_decision == "direct":
+        return validate_direct_routing(plan, config_path)
+    if envelope_type == "micro-task" or routing_decision == "micro":
+        return validate_micro_task(plan, config_path)
+
     errors: list[str] = []
     warnings: list[str] = []
 
@@ -373,6 +951,8 @@ def validate_plan(
         errors.append(
             f"schema_version must be exactly {SUPPORTED_SCHEMA_VERSION!r}"
         )
+    if plan.get("envelope_type") != "batch-plan":
+        errors.append("envelope_type must be 'batch-plan' for a batch PLAN")
     if not valid_id(plan.get("plan_id")):
         errors.append(
             "plan_id must start with an alphanumeric character and contain only letters, digits, '.', '_' or '-'"
@@ -444,8 +1024,8 @@ def validate_plan(
         errors.append("routing must be an object")
         routing = {}
     routing_decision = routing.get("decision")
-    if routing_decision != "orchestrated":
-        errors.append("routing.decision must be 'orchestrated' for a scout plan")
+    if routing_decision != "batch":
+        errors.append("routing.decision must be 'batch' for a batch PLAN task set")
     estimated_files = routing.get("estimated_files")
     if (
         not isinstance(estimated_files, int)
@@ -464,25 +1044,9 @@ def validate_plan(
         errors.append("routing.multiple_information_boundaries must be a boolean")
     if not is_non_empty_string(routing.get("basis")):
         errors.append("routing.basis must be a non-empty string")
-    routing_gate = effective_config.get("routing_gate", {})
-    if isinstance(routing_gate, dict):
-        max_files_direct = routing_gate.get("max_files_direct")
-        max_tokens_direct = routing_gate.get("max_estimated_tokens_direct")
-        if (
-            isinstance(estimated_files, int)
-            and isinstance(max_files_direct, int)
-            and isinstance(estimated_tokens, int)
-            and isinstance(max_tokens_direct, int)
-        ):
-            should_orchestrate = (
-                estimated_files > max_files_direct
-                or estimated_tokens > max_tokens_direct
-                or routing.get("multiple_information_boundaries") is True
-            )
-            if not should_orchestrate:
-                errors.append(
-                    "routing.decision is orchestrated but the effective routing gate selects the fast lane"
-                )
+    economics = validate_economics(
+        routing.get("economics"), "routing.economics", errors, require_benefit=True
+    )
 
     assumptions = plan.get("assumptions", [])
     assumptions_list = validate_string_list(assumptions, "assumptions", errors)
@@ -674,6 +1238,7 @@ def validate_plan(
                 f"{path} is missing required fields: {', '.join(missing_task_fields)}"
             )
 
+        _validate_task_kind(task.get("task_kind"), f"{path}.task_kind", errors)
         if not is_non_empty_string(task.get("agent_role")):
             errors.append(f"{path}.agent_role must be a non-empty string")
         if not is_non_empty_string(task.get("objective")):
@@ -712,32 +1277,7 @@ def validate_plan(
             task.get("stop_conditions", []), f"{path}.stop_conditions", errors
         )
 
-        expansion = task.get("allowed_expansion")
-        if not isinstance(expansion, dict):
-            errors.append(f"{path}.allowed_expansion must be an object")
-        else:
-            expansion_mode = expansion.get("mode")
-            if expansion_mode not in VALID_EXPANSION_MODES:
-                errors.append(
-                    f"{path}.allowed_expansion.mode must be one of {sorted(VALID_EXPANSION_MODES)}"
-                )
-            additional = expansion.get("max_additional_tokens")
-            if (
-                not isinstance(additional, int)
-                or isinstance(additional, bool)
-                or additional < 0
-            ):
-                errors.append(
-                    f"{path}.allowed_expansion.max_additional_tokens must be an integer >= 0"
-                )
-            elif expansion_mode == "deny" and additional != 0:
-                warnings.append(
-                    f"task {task_id} uses expansion mode 'deny' but has a non-zero expansion budget"
-                )
-            elif expansion_mode == "request" and additional == 0:
-                warnings.append(
-                    f"task {task_id} permits expansion but has a zero expansion budget"
-                )
+        _validate_expansion_policy(task.get("allowed_expansion"), f"{path}.allowed_expansion", errors)
 
     task_id_set = set(tasks)
     for task_id, dependencies in task_dependencies.items():
@@ -762,45 +1302,59 @@ def validate_plan(
     if cycle:
         errors.append(f"task dependency cycle detected: {' -> '.join(cycle)}")
 
-    discovery_authorization = plan.get("discovery_authorization")
-    if not isinstance(discovery_authorization, dict):
-        errors.append("discovery_authorization must be an object")
-        discovery_authorization = {}
-    if discovery_authorization.get("authorized") is not True:
-        errors.append("discovery_authorization.authorized must be true")
-    scout_model = discovery_authorization.get("scout_model")
-    if not is_non_empty_string(scout_model):
-        errors.append("discovery_authorization.scout_model must be a non-empty string")
-    packet_count = discovery_authorization.get("packet_count")
-    if (
-        not isinstance(packet_count, int)
-        or isinstance(packet_count, bool)
-        or packet_count < 1
-    ):
-        errors.append("discovery_authorization.packet_count must be an integer >= 1")
-    elif packet_count != len(tasks_value):
+    if choose_routing(
+        economics,
+        task_count=len(tasks),
+        multiple_information_boundaries=routing.get("multiple_information_boundaries")
+        is True,
+    ) != "batch":
         errors.append(
-            "discovery_authorization.packet_count must equal the number of scout tasks"
-        )
-    token_ceiling = discovery_authorization.get("token_ceiling")
-    if (
-        not isinstance(token_ceiling, int)
-        or isinstance(token_ceiling, bool)
-        or token_ceiling < 1
-    ):
-        errors.append("discovery_authorization.token_ceiling must be an integer >= 1")
-    elif isinstance(budget.get("max_total_dispatched_tokens"), int) and (
-        token_ceiling > budget["max_total_dispatched_tokens"]
-    ):
-        errors.append(
-            "discovery_authorization.token_ceiling must not exceed "
-            "budget.max_total_dispatched_tokens"
+            "batch routing requires independently describable tasks with positive "
+            "delegation economics and multiple tasks or information boundaries"
         )
 
+    policy = _validate_plan_task_policy(
+        plan.get("plan_task_policy"), "plan_task_policy", errors
+    )
+    authorization = _validate_plan_task_authorization(
+        plan.get("plan_task_authorization"),
+        "plan_task_authorization",
+        errors,
+        expected_task_count=len(tasks_value),
+        policy=policy,
+    )
+    token_ceiling = authorization.get("token_ceiling")
+
+    configured_policy = effective_config.get("plan_task_policy", {})
+    if isinstance(configured_policy, dict):
+        _validate_plan_task_policy(
+            configured_policy, "effective plan_task_policy", errors
+        )
+        if policy and policy != configured_policy:
+            errors.append(
+                "plan_task_policy must exactly match the effective configuration policy"
+            )
+    configured_routing = effective_config.get("routing_policy", {})
+    if not isinstance(configured_routing, dict):
+        errors.append("effective routing_policy must be an object")
+    else:
+        configured_decisions = configured_routing.get("allowed_decisions")
+        if (
+            not isinstance(configured_decisions, list)
+            or any(not isinstance(item, str) for item in configured_decisions)
+            or set(configured_decisions) != VALID_ROUTING_DECISIONS
+        ):
+            errors.append("effective routing policy decisions do not match the validator")
+        if configured_routing.get("decision_basis") != "context-economics":
+            errors.append("effective routing policy must use context-economics")
+        _validate_integer(
+            configured_routing.get("coordination_overhead_tokens"),
+            "effective routing_policy.coordination_overhead_tokens",
+            errors,
+        )
     scout_policy = effective_config.get("scout_policy", {})
     if isinstance(scout_policy, dict):
-        configured_modes = scout_policy.get("allowed_expansion_modes")
-        if configured_modes != sorted(VALID_EXPANSION_MODES):
+        if scout_policy.get("allowed_expansion_modes") != sorted(VALID_EXPANSION_MODES):
             errors.append(
                 "effective scout policy expansion modes do not match the validator"
             )
@@ -809,6 +1363,19 @@ def validate_plan(
         if scout_policy.get("planner_approval_required_for_request") is not True:
             errors.append(
                 "effective scout policy must require Planner approval for request expansion"
+            )
+        if scout_policy.get("response_schema_version") != SUPPORTED_SCHEMA_VERSION:
+            errors.append(
+                "effective scout policy response schema must match the PLAN schema version"
+            )
+        configured_task_kinds = scout_policy.get("task_kinds")
+        if (
+            not isinstance(configured_task_kinds, list)
+            or any(not isinstance(item, str) for item in configured_task_kinds)
+            or set(configured_task_kinds) != READ_ONLY_TASK_KINDS
+        ):
+            errors.append(
+                "effective scout policy task kinds do not match the read-only task kinds"
             )
 
     merge = plan.get("merge")
@@ -918,6 +1485,18 @@ def validate_plan(
         total_estimated_input_tokens + total_expansion_allowance
     )
 
+    if (
+        isinstance(economics.get("delegated_input_tokens"), int)
+        and economics.get("delegated_input_tokens") != total_estimated_input_tokens
+    ):
+        errors.append(
+            "routing.economics.delegated_input_tokens must equal the computed batch input estimate"
+        )
+    if economics.get("estimated_result_tokens", 0) <= 0:
+        errors.append(
+            "routing.economics.estimated_result_tokens must be greater than 0 for batch delegation"
+        )
+
     if isinstance(budget.get("max_subagents"), int) and len(tasks) > budget["max_subagents"]:
         errors.append(
             f"task count {len(tasks)} exceeds budget.max_subagents={budget['max_subagents']}"
@@ -951,8 +1530,41 @@ def validate_plan(
         and worst_case_total_input_tokens > token_ceiling
     ):
         errors.append(
-            "discovery_authorization.token_ceiling is below the worst-case "
+            "plan_task_authorization.token_ceiling is below the worst-case "
             "dispatched input including expansion allowances"
+        )
+
+    policy_ceiling = policy.get("max_estimated_input_tokens_per_round")
+    if (
+        isinstance(policy_ceiling, int)
+        and worst_case_total_input_tokens > policy_ceiling
+    ):
+        errors.append(
+            "worst-case PLAN input exceeds the pre-authorized per-round policy "
+            f"ceiling {policy_ceiling}"
+        )
+
+    max_concurrent = policy.get("max_concurrent_tasks")
+    dispatch_layers: list[list[str]] = []
+    remaining = set(tasks)
+    completed: set[str] = set()
+    while remaining:
+        ready = sorted(
+            task_id
+            for task_id in remaining
+            if set(task_dependencies.get(task_id, [])).issubset(completed)
+        )
+        if not ready:
+            break
+        dispatch_layers.append(ready)
+        completed.update(ready)
+        remaining.difference_update(ready)
+    if isinstance(max_concurrent, int) and any(
+        len(layer) > max_concurrent for layer in dispatch_layers
+    ):
+        errors.append(
+            "a PLAN dispatch layer exceeds the pre-authorized maximum concurrency "
+            f"of {max_concurrent}"
         )
 
     if isinstance(shared_limit, int) and shared_source_tokens > shared_limit:
@@ -998,6 +1610,8 @@ def validate_plan(
         "estimated_total_input_tokens": total_estimated_input_tokens,
         "total_expansion_allowance": total_expansion_allowance,
         "worst_case_total_input_tokens": worst_case_total_input_tokens,
+        "max_dispatch_concurrency": max((len(layer) for layer in dispatch_layers), default=0),
+        "dispatch_layers": dispatch_layers,
         "per_task": task_metrics,
     }
 
@@ -1024,6 +1638,14 @@ def print_human_report(report: dict[str, Any]) -> None:
             print(f"  - {item}")
 
     metrics = report["metrics"]
+    if "routing_decision" in metrics:
+        print(f"Routing decision: {metrics['routing_decision']}")
+    if "estimated_total_input_tokens" not in metrics:
+        if "estimated_input_tokens" in metrics:
+            print(f"\nEstimated input tokens: {metrics['estimated_input_tokens']}")
+        if "estimated_result_tokens" in metrics:
+            print(f"Estimated result tokens: {metrics['estimated_result_tokens']}")
+        return
     print("\nMetrics:")
     print(f"  Tasks: {metrics['task_count']}")
     print(f"  Sources: {metrics['source_count']}")
@@ -1046,6 +1668,8 @@ def print_human_report(report: dict[str, Any]) -> None:
         f"{metrics['accidental_overlap_ratio']:.3f} "
         f"({metrics['accidental_duplicate_source_tokens']} duplicate source tokens)"
     )
+    if "max_dispatch_concurrency" in metrics:
+        print(f"  Maximum concurrent PLAN tasks: {metrics['max_dispatch_concurrency']}")
     for task_id, task_metrics in metrics["per_task"].items():
         print(
             f"  Task {task_id}: {task_metrics['estimated_input_tokens']} input tokens "
@@ -1056,7 +1680,9 @@ def print_human_report(report: dict[str, Any]) -> None:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("plan", type=Path, help="path to orchestration-plan.json")
+    parser.add_argument(
+        "plan", type=Path, help="path to a direct, micro-task, or batch PLAN envelope"
+    )
     parser.add_argument(
         "--config",
         type=Path,

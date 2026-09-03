@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a read-only scout Evidence Packet deterministically."""
+"""Validate a read-only PLAN Evidence Task Packet deterministically."""
 
 from __future__ import annotations
 
@@ -10,6 +10,16 @@ from pathlib import Path
 from typing import Any
 
 from validate_plan import (
+    EVIDENCE_PACKET_EVIDENCE_FIELDS,
+    EVIDENCE_PACKET_FACT_CONFIDENCE,
+    EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+    EVIDENCE_PACKET_FACT_FIELDS,
+    EVIDENCE_PACKET_FINDING_CONFIDENCE,
+    EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES,
+    EVIDENCE_PACKET_FINDING_SEVERITIES,
+    EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
+    IMPLEMENTATION_TASK_KIND,
+    READ_ONLY_TASK_KINDS,
     SUPPORTED_SCHEMA_VERSION,
     VALID_EXPANSION_MODES,
     is_non_empty_string,
@@ -23,6 +33,7 @@ EVIDENCE_PACKET_REQUIRED_FIELDS = [
     "packet_type",
     "plan_id",
     "task_id",
+    "task_kind",
     "status",
     "summary",
     "findings",
@@ -42,9 +53,25 @@ EVIDENCE_PACKET_FINDING_FIELDS = [
     "recommendation",
 ]
 EVIDENCE_PACKET_STATUSES = {"complete", "partial", "blocked"}
-FINDING_SEVERITIES = {"low", "medium", "high", "critical"}
-FINDING_CONFIDENCE = {"low", "medium", "high"}
-FACT_CONFIDENCE = {"confirmed", "inferred", "unverified"}
+FINDING_SEVERITIES = EVIDENCE_PACKET_FINDING_SEVERITIES
+FINDING_CONFIDENCE = EVIDENCE_PACKET_FINDING_CONFIDENCE
+FACT_CONFIDENCE = EVIDENCE_PACKET_FACT_CONFIDENCE
+FINDING_SEVERITY_VALUES = EVIDENCE_PACKET_FINDING_SEVERITY_VALUES
+FINDING_CONFIDENCE_VALUES = EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES
+FACT_CONFIDENCE_VALUES = EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES
+FORBIDDEN_CONTROL_FIELDS = {
+    "write_authority",
+    "can_write",
+    "external_mutations",
+    "can_mutate_external_systems",
+    "scope_decision",
+    "contract_authority",
+    "can_author_contract",
+    "spawn_agents",
+    "can_spawn_agents",
+    "user_interaction",
+    "phase_owner",
+}
 
 
 def load_packet(path: Path) -> dict[str, Any]:
@@ -77,6 +104,20 @@ def _validate_positive_integer(value: Any, path: str, errors: list[str]) -> None
         errors.append(f"{path} must be an integer >= 1")
 
 
+def _reject_forbidden_control_fields(value: Any, path: str, errors: list[str]) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if key in FORBIDDEN_CONTROL_FIELDS:
+                errors.append(
+                    f"{child_path} is forbidden in a read-only Evidence Packet"
+                )
+            _reject_forbidden_control_fields(child, child_path, errors)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_forbidden_control_fields(child, f"{path}[{index}]", errors)
+
+
 def _validate_evidence(
     evidence: Any,
     path: str,
@@ -91,7 +132,7 @@ def _validate_evidence(
         if not isinstance(item, dict):
             errors.append(f"{item_path} must be an object")
             continue
-        for field in ("source_id", "locator", "note"):
+        for field in EVIDENCE_PACKET_EVIDENCE_FIELDS:
             if not is_non_empty_string(item.get(field)):
                 errors.append(f"{item_path}.{field} must be a non-empty string")
         source_id = item.get("source_id")
@@ -151,7 +192,7 @@ def _validate_facts(
         if not isinstance(fact, dict):
             errors.append(f"{path} must be an object")
             continue
-        for field in ("id", "statement", "provenance", "confidence"):
+        for field in EVIDENCE_PACKET_FACT_FIELDS:
             if field not in fact:
                 errors.append(f"{path} is missing required field: {field}")
         fact_id = fact.get("id")
@@ -323,6 +364,14 @@ def validate_evidence_packet(
     for field in ("plan_id", "task_id"):
         if not valid_id(packet.get(field)):
             errors.append(f"{field} has an invalid identifier")
+    task_kind = packet.get("task_kind")
+    if task_kind not in READ_ONLY_TASK_KINDS:
+        if task_kind == IMPLEMENTATION_TASK_KIND:
+            errors.append("task_kind 'implementation' is not allowed in an Evidence Packet")
+        else:
+            errors.append(
+                f"task_kind must be one of {sorted(READ_ONLY_TASK_KINDS)}"
+            )
     if packet.get("status") not in EVIDENCE_PACKET_STATUSES:
         errors.append(f"status must be one of {sorted(EVIDENCE_PACKET_STATUSES)}")
     if not is_non_empty_string(packet.get("summary")):
@@ -349,7 +398,19 @@ def validate_evidence_packet(
             )
             if plan_task is None:
                 errors.append("packet.task_id does not identify a task in the plan")
+            elif plan_task.get("task_kind") != task_kind:
+                errors.append("packet.task_kind does not match the plan task")
+        elif plan.get("envelope_type") == "micro-task":
+            if plan.get("task_id") != packet.get("task_id"):
+                errors.append("packet.task_id does not match the micro-task envelope")
+            if plan.get("task_kind") != task_kind:
+                errors.append("packet.task_kind does not match the micro-task envelope")
+            plan_task = plan
+        else:
+            errors.append("plan does not contain a batch task list or micro-task envelope")
         plan_sources = plan.get("sources")
+        if plan_sources is None:
+            plan_sources = plan.get("assigned_sources")
         if isinstance(plan_sources, list):
             source_ids = {
                 source.get("id")
@@ -368,6 +429,7 @@ def validate_evidence_packet(
         errors.append("metrics must be an object when present")
 
     _reject_forbidden_expansion_values(packet, "packet", errors)
+    _reject_forbidden_control_fields(packet, "packet", errors)
     return {"valid": not errors, "errors": errors}
 
 

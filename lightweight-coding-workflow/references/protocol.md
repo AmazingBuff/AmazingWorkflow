@@ -1,19 +1,23 @@
 # Two-Phase Coding Core Protocol
 
-Protocol version: `0.6`.
+Protocol version: `0.7`.
 
-This document defines the host-neutral contract, state, worktree, single-writer, documentation, and result rules. Host detection and execution mappings belong to the [Host Adapter Contract](adapter-contract.md) and the selected adapter reference. Phase 1 discovery routing belongs to the [Context Routing reference](context-routing.md).
+This document defines the host-neutral contract, two public control phases,
+task-capability envelopes, worktree, single-writer, documentation, and result
+rules. Host detection and execution mappings belong to the [Host Adapter
+Contract](adapter-contract.md) and the selected adapter reference. PLAN routing
+belongs to the [Context Routing reference](context-routing.md).
 
 ## Core invariants
 
 - One user-facing Planner owns requirements, approval, and final reporting.
 - One implementation worker owns product-code writes to a worktree.
-- The workflow has exactly two phases: planning and implementation. Read-only scouting is a Phase 1 activity, not a third phase or a second writer.
-- No Scout dispatch occurs before the Planner records explicit discovery authorization with the exact scout model, packet count, and token ceiling.
+- The workflow has exactly two public control phases: `PLAN` and `WORK`. Direct inspection and read-only PLAN tasks are activities inside PLAN, not a third phase or a second writer.
+- No PLAN task dispatch occurs before the Planner records the exact task model, task count, and token ceiling in the authorization envelope.
 - No product-code write occurs before contract and implementation-model approval.
-- Only a compatible adapter with `support_state: VERIFIED` may dispatch product-code writes. Scout dispatch is a separate, optional adapter capability and never authorizes writes.
+- Only a compatible adapter with `support_state: VERIFIED` may dispatch product-code writes. PLAN-task dispatch is a separate, optional read-only adapter capability and never authorizes writes.
 - An approved contract is the sole implementation authority and is never edited in place.
-- Model selection is explicit for every dispatched role (scouts and worker) and is never silently substituted.
+- Model selection is explicit for every dispatched role (PLAN tasks and WORK worker) and is never silently substituted.
 - Permissions may be inherited or narrowed, never broadened by this workflow.
 - Version-control mutations require exact, separately recorded authority; contract or implementation approval alone grants none.
 - Required feature documentation is implementation material in the same logical change, not another phase.
@@ -42,8 +46,8 @@ Use a short, filesystem-safe task id. Do not put secrets, personal data, or prop
 - Existing user changes that must be preserved are identified in the baseline or constraints.
 - Verification commands are real project commands, or the contract states why a check is manual.
 - `implementation_model` is the exact user-approved value. Parent inheritance is recorded only as `inherit-parent (user-approved)`.
-- The Discovery section records the routing decision (`direct` or `orchestrated`), its basis, the scout model when the orchestrated lane ran, estimated and measured discovery token spend, and the evidence-locator index used by requirements and acceptance criteria. Requirements and acceptance criteria should reference surviving locators (`path:symbol`, `path:lines a-b`) so the worker starts from precise coordinates.
-- An orchestrated Discovery section also records whether discovery was dispatched. Its authorization record must contain the exact scout model, packet count, and token ceiling; `dispatched: no` is required when no scheduler ran.
+- The Discovery section records the routing decision (`direct`, `micro`, or `batch`), its context-economics basis, delegated input and result estimates, and the evidence-locator index used by requirements and acceptance criteria. Requirements and acceptance criteria should reference surviving locators (`path:symbol`, `path:lines a-b`) so the worker starts from precise coordinates.
+- A micro or batch Discovery section records the exact PLAN-task model, task count, token ceiling, and whether dispatch occurred. A direct record has no task packet. The record must state that total-token savings are not inferred.
 - Stable symbols, sections, objects, and source content identity are preferred over ordinary line ranges. Use a line range only when necessary and pair it with a source revision or digest when staleness matters.
 - Applicable bundled coding-rule component documents are recorded one host-resolvable absolute path per entry, or the section records `None`; the worker loads every listed document before its first edit.
 - The Version control section records `git` or `none`. A Git-backed task also records the read-only baseline, one logical commit boundary, Changelog decision and proposed entry, proposed Conventional Commit message, commit authority, and separate push authority.
@@ -55,7 +59,15 @@ The adapter owns the host-specific representation and validation of the approved
 
 The Planner must not mark a contract `APPROVED` until the workflow revision, protocol digest, and adapter digest are populated and verified against the exact resources selected for that task.
 
-Workflow revision `0.6.2` retains Core protocol `0.6` and Codex Adapter `0.6`. It migrates text-resource digests from the prior `0.6.1` raw-byte semantics to canonical UTF-8/LF text: decode UTF-8, normalize CRLF and lone CR to LF, re-encode UTF-8, then hash with SHA-256. Configuration, protocol, and adapter text use this representation; binary and generated packet artifacts retain raw-byte hashing. Existing approved `0.6.1` contracts may continue with matching historical `0.6.1` resources; reapproval is required only to run a task under workflow revision `0.6.2` and its canonical UTF-8/LF text-digest semantics. New `0.6.2` contracts require `workflow_revision`, `protocol_sha256`, and `adapter_sha256` before approval or dispatch.
+Workflow revision `0.7.0` uses Core protocol `0.7`, schema `2.0`, and the
+coordinated Adapter `0.7`. Text-resource digests use canonical UTF-8/LF text:
+decode UTF-8, normalize CRLF and lone CR to LF, re-encode UTF-8, then hash with
+SHA-256. Configuration, protocol, and adapter text use this representation;
+binary and generated packet artifacts retain raw-byte hashing. Existing
+approved `0.6.x` contracts remain immutable and continue only with their
+matching historical resources; they are not revalidated against `0.7.0` files.
+New `0.7.0` contracts require `workflow_revision`, `protocol_sha256`, and
+`adapter_sha256` before approval or dispatch.
 
 ### Revision rules
 
@@ -81,14 +93,45 @@ A clarification that changes none of the items above may be relayed to the same 
 
 ## Two-phase state model
 
-The Core exposes only these phases:
+The Core exposes only these public phases:
 
-1. `PLANNING`: discover (directly or through read-only scouts per the [Context Routing reference](context-routing.md)), clarify, validate capabilities, prepare a contract, and obtain approval.
-2. `IMPLEMENTING`: dispatch one worker, execute within the contract, verify, and return one result.
+1. `PLAN`: discover directly or through bounded read-only Evidence Task Agents per the [Context Routing reference](context-routing.md), clarify, validate capabilities, prepare a contract, and obtain approval.
+2. `WORK`: dispatch one implementation worker, execute within the contract, verify, and return one result.
 
-Internal host states do not create a third phase or another decision-making role. Scout subagents are read-only discovery helpers inside `PLANNING`; they are not a phase, a writer, or a planner.
+Internal host states do not create a third phase or another decision-making
+role. Evidence Task Agents are read-only helpers inside `PLAN`; they are not a
+phase, a writer, or a planner. The implementation Agent is a WORK capability,
+not an owner of the WORK phase's decisions.
 
-## Dispatch envelope
+## PLAN task envelope
+
+The minimal micro-task envelope is defined by
+`assets/context-routing/orchestration-plan.schema.json` and contains one
+supported read-only `task_kind`, exact source descriptors and query, budget,
+stop conditions, context-economics record, the pre-authorized PLAN policy,
+and the Evidence Packet response contract. It has no full parent transcript,
+write authority, external mutation authority, scope-decision authority,
+contract-authoring authority, or spawn authority.
+
+Batch PLAN work uses the same task-kind and policy fields inside the validated
+batch plan. A batch may contain multiple independent tasks and dependency
+layers, but each layer is bounded by the policy's maximum concurrency.
+
+Every delegated routing record must include:
+
+- estimated Planner-context savings;
+- estimated delegated input tokens and result size;
+- coordination overhead and weighted-cost rationale;
+- explicit evidence that the task is independently describable; and
+- an explicit caveat that total-token savings are not claimed.
+
+The pre-authorized Codex PLAN policy is `gpt-5.6-luna/max`, at most two
+concurrent read-only tasks, at most 12,000 estimated input tokens per PLAN
+round, no complete parent transcript, no writes or external mutations, one
+user-visible dispatch notice, and no per-task approval while in policy.
+Exceeding it requires user approval or direct fallback.
+
+## WORK dispatch envelope
 
 The Planner supplies the implementation worker with:
 
@@ -106,7 +149,18 @@ The selected adapter defines how that envelope is represented and dispatched.
 
 The adapter must reject dispatch when any required revision or digest field is missing, still a draft placeholder, or does not match the exact loaded workflow, Core protocol, or selected adapter resource. This check occurs after approval as well as before the worker starts.
 
-When an adapter provides read-only scouting, the Scout result is an Evidence Packet, not a Core implementation result. The packet shape is defined by `assets/context-routing/evidence-packet.schema.json` and validated by `scripts/validate_evidence_packet.py`; the generated task packet must carry both references so the response envelope cannot drift.
+When an adapter provides optional read-only PLAN-task dispatch, the Evidence
+Task result is an Evidence Packet, not a Core implementation result. The
+packet shape is defined by `assets/context-routing/evidence-packet.schema.json`
+and validated by `scripts/validate_evidence_packet.py`; every generated task
+packet must carry both references so the response envelope cannot drift. The
+optional adapter mapping is eligible only after live task isolation, model,
+relay, and no-write evidence is retained. The Codex mapping records that
+evidence for its tested micro path. The task response contract must
+enumerate finding severity (`low`, `medium`, `high`, `critical`), finding
+confidence (`low`, `medium`, `high`), fact fields (`id`, `statement`,
+`provenance`, `confidence`), and fact confidence (`confirmed`, `inferred`,
+`unverified`).
 
 ## Worktree ownership
 
@@ -292,7 +346,7 @@ For `DONE`, the Planner reports:
 1. outcome;
 2. implementation model;
 3. selected host adapter and version;
-4. routing decision, scout model, and measured discovery token spend when the orchestrated lane ran;
+4. routing decision, PLAN-task model, and measured discovery token spend when micro or batch delegation ran;
 5. changed files;
 6. acceptance evidence;
 7. commands and test results;
@@ -303,6 +357,15 @@ For `DONE`, the Planner reports:
 
 The Planner may inspect the diff and rerun read-only checks, but may not edit product code.
 
-## Protocol 0.6 compatibility
+## Protocol 0.7 compatibility
 
-Protocol `0.6` adds Context Routing to `0.5`: a routing decision and optional read-only scout dispatch in Phase 1, the Discovery contract section, and the optional `read_only_scout_dispatch` adapter capability. The nine `0.5` capabilities are unchanged; adapters updated for `0.6` keep their `0.5` mappings and may add the optional capability. Approved `0.5` contracts remain immutable: continue them with their matching historical Core and adapter resources, or create and approve a new `0.6` revision. Do not pair a `0.6` Core with older adapter metadata through an implicit compatibility range. An exact same-version adapter without the optional capability remains eligible for implementation and restricts the Planner to the fast lane; older metadata is incompatible and is rejected before approval.
+Protocol `0.7` keeps the two-phase Core and single-WORK-writer invariant while
+making PLAN routing task-capability based. It adds the direct/micro/batch
+routing record, the minimal micro-task envelope, context-economics accounting,
+and the pre-authorized Codex PLAN policy. The optional adapter capability is
+still named `read_only_scout_dispatch` for metadata compatibility, but its
+semantics are task-scoped Evidence Task dispatch. A same-version adapter
+without that optional capability remains eligible for WORK and uses direct
+PLAN handling. Approved `0.6.x` contracts remain immutable and continue only
+with matching historical Core, Skill, adapter, schema, and configuration
+resources; no `0.7` resource is paired with an older contract implicitly.

@@ -4,8 +4,8 @@ revision: {{REVISION}}
 status: "DRAFT"
 created_at: "{{ISO_8601_TIMESTAMP}}"
 supersedes: null
-workflow_revision: "0.6.2"
-protocol_version: "0.6"
+workflow_revision: "0.7.0"
+protocol_version: "0.7"
 protocol_sha256: null
 host_adapter: null
 adapter_version: null
@@ -28,15 +28,15 @@ baseline_revision: null
 
 - Routing: `direct`
 - Basis: {{FILES_AND_TOKEN_ESTIMATE_OR_OTHER_ROUTING_BASIS}}
-- Scout model: `not-applicable`
-- Discovery authorization: `not-applicable` for this safe direct-lane draft
+- PLAN-task model: `not-applicable`
+- PLAN-task authorization: `not-applicable` for this safe direct-lane draft
 - Authorized packet count: not-applicable
 - Authorized token ceiling: not-applicable
 - Discovery token spend: not-applicable
 - Dispatched: `no`
 - Evidence-locator index: not-applicable
 
-Requirements and acceptance criteria below reference surviving stable locators (`path:symbol`, `path:section`, `path:object`, or `path:lines a-b` only when necessary) from this index so the worker starts from precise coordinates. Prefer source revision or content identity over ordinary line ranges when staleness matters. Use `direct` with a stated basis when no scouts ran; `orchestrated` requires explicit discovery authorization with the scout model, packet count, token ceiling, dispatch state, and spend fields. This template is a safe draft and must be populated and changed to `APPROVED` only after the approval gate. Before approval, replace the workflow/protocol/adapter revision placeholders and null digests with verified values from the exact loaded resources; an `APPROVED` contract may not retain placeholders or nulls.
+Requirements and acceptance criteria below reference surviving stable locators (`path:symbol`, `path:section`, `path:object`, or `path:lines a-b` only when necessary) from this index so the worker starts from precise coordinates. Prefer source revision or content identity over ordinary line ranges when staleness matters. PLAN routing may be `direct`, `micro`, or `batch`; a micro task is a minimal single-task envelope and a batch retains the full orchestration plan. This template is a safe draft and must be populated and changed to `APPROVED` only after the approval gate. Before approval, replace the workflow/protocol/adapter revision placeholders and null digests with verified values from the exact loaded resources; an `APPROVED` contract may not retain placeholders or nulls.
 
 ## Requirements
 

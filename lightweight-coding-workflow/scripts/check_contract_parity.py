@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that the routing schema, validator, config, packets, and Agent agree."""
+"""Check that PLAN task schemas, validators, config, packets, and Agent agree."""
 
 from __future__ import annotations
 
@@ -10,14 +10,24 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from build_task_packets import build_packet
+from build_task_packets import build_micro_task_packet, build_packet
 from validate_evidence_packet import (
+    EVIDENCE_PACKET_EVIDENCE_FIELDS,
+    EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+    EVIDENCE_PACKET_FACT_FIELDS,
+    EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES,
     EVIDENCE_PACKET_FINDING_FIELDS,
+    EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
     EVIDENCE_PACKET_REQUIRED_FIELDS,
     EVIDENCE_PACKET_TOP_LEVEL_OPTIONAL_FIELDS,
 )
 from validate_plan import (
     DEFAULT_CONFIG_RELATIVE_PATH,
+    PLAN_TASK_MAX_CONCURRENT,
+    PLAN_TASK_MAX_INPUT_TOKENS_PER_ROUND,
+    PLAN_TASK_MODEL,
+    PLAN_TASK_REASONING_EFFORT,
+    READ_ONLY_TASK_KINDS,
     REQUIRED_BUDGET_FIELDS,
     REQUIRED_TASK_FIELDS,
     REQUIRED_TOP_LEVEL_FIELDS,
@@ -27,14 +37,28 @@ from validate_plan import (
     load_effective_config,
     load_plan,
     sha256_text_normalized,
+    validate_direct_routing,
+    validate_micro_task,
     validate_plan,
 )
 
-PLAN_SCHEMA_ID = "urn:lightweight-coding-workflow:orchestration-plan-schema:1.1"
-EVIDENCE_SCHEMA_ID = "urn:lightweight-coding-workflow:evidence-packet-schema:1.1"
-WORKFLOW_REVISION = "0.6.2"
-CORE_PROTOCOL_VERSION = "0.6"
-CODEX_ADAPTER_VERSION = "0.6"
+PLAN_SCHEMA_ID = "urn:lightweight-coding-workflow:orchestration-plan-schema:2.0"
+EVIDENCE_SCHEMA_ID = "urn:lightweight-coding-workflow:evidence-packet-schema:2.0"
+WORKFLOW_REVISION = "0.7.0"
+CORE_PROTOCOL_VERSION = "0.7"
+CODEX_ADAPTER_VERSION = "0.7"
+ADAPTER_CONTRACT_VERSION = "0.7"
+HISTORICAL_CONTRACT_EVIDENCE = {
+    (
+        "0.6.2",
+        "0.6",
+        "codex",
+        "0.6",
+    ): {
+        "protocol_sha256": "sha256:90decc027d54e93bf9cb5ebae9ee4c74f17b57e8ae98c9b231281eebd3d299f1",
+        "adapter_sha256": "sha256:45f4267ca861558959e8a8b2b7a51ae27d4311dcc3d3bb44ec6f3551376ba26d",
+    }
+}
 CONTRACT_EVIDENCE_FIELDS = (
     "workflow_revision",
     "protocol_version",
@@ -322,6 +346,28 @@ def validate_approved_contract(
     except (OSError, UnicodeError, ValueError) as exc:
         return [f"contract evidence check: {exc}"]
 
+    historical_key = (
+        contract.get("workflow_revision"),
+        contract.get("protocol_version"),
+        contract.get("host_adapter"),
+        contract.get("adapter_version"),
+    )
+    historical_evidence = HISTORICAL_CONTRACT_EVIDENCE.get(historical_key)
+    if historical_evidence is not None:
+        if contract.get("status") != "APPROVED":
+            errors.append("contract evidence check: contract status must be APPROVED")
+        for field in CONTRACT_EVIDENCE_FIELDS:
+            value = contract.get(field)
+            if not isinstance(value, str) or not value.strip() or "{{" in value:
+                errors.append(
+                    f"contract evidence check: {field} must be populated without placeholders"
+                )
+        for field, expected in historical_evidence.items():
+            check_equal(
+                contract.get(field), expected, f"historical contract {field}", errors
+            )
+        return errors
+
     host_adapter = contract.get("host_adapter")
     if isinstance(host_adapter, str) and host_adapter.strip() and "{{" not in host_adapter:
         adapter_name = Path(host_adapter).name
@@ -427,10 +473,12 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
     config_path = root / DEFAULT_CONFIG_RELATIVE_PATH
     example_path = root / "assets/context-routing/example-plan.json"
     agent_path = root / "agents/lightweight_scout.toml"
+    implementer_path = root / "agents/lightweight_implementer.toml"
     template_path = root / "assets/implementation-contract.md"
     skill_path = root / "SKILL.md"
     protocol_path = root / "references/protocol.md"
     adapter_path = root / "references/adapters/codex.md"
+    adapter_contract_path = root / "references/adapter-contract.md"
 
     try:
         plan_schema = load_json(schema_path)
@@ -441,16 +489,20 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         return {"valid": False, "errors": [str(exc)]}
 
     check_equal(
-        plan_schema.get("properties", {}).get("schema_version", {}).get("const"),
+        plan_schema.get("$defs", {})
+        .get("batchPlan", {})
+        .get("properties", {})
+        .get("schema_version", {})
+        .get("const"),
         SUPPORTED_SCHEMA_VERSION,
-        "plan schema_version",
+        "batch plan schema_version",
         errors,
     )
     check_equal(plan_schema.get("$id"), PLAN_SCHEMA_ID, "plan schema id", errors)
     check_equal(
-        set(plan_schema.get("required", [])),
+        set(plan_schema.get("$defs", {}).get("batchPlan", {}).get("required", [])),
         REQUIRED_TOP_LEVEL_FIELDS,
-        "plan required fields",
+        "batch plan required fields",
         errors,
     )
     expansion_enum = (
@@ -479,6 +531,34 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         .get("required", [])
     )
     check_equal(budget_schema_fields, REQUIRED_BUDGET_FIELDS, "budget fields", errors)
+    micro_required = {
+        "schema_version",
+        "envelope_type",
+        "plan_id",
+        "task_id",
+        "task_kind",
+        "goal",
+        "objective",
+        "query",
+        "sources",
+        "deliverable",
+        "stop_conditions",
+        "evidence_required",
+        "allowed_expansion",
+        "budget",
+        "economics",
+        "plan_task_policy",
+        "plan_task_authorization",
+        "model_override",
+        "response_contract",
+        "execution_rules",
+    }
+    check_equal(
+        set(plan_schema.get("$defs", {}).get("microTask", {}).get("required", [])),
+        micro_required,
+        "micro-task required fields",
+        errors,
+    )
 
     check_equal(
         evidence_schema.get("properties", {}).get("schema_version", {}).get("const"),
@@ -511,6 +591,42 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         "Evidence Packet finding fields",
         errors,
     )
+    check_equal(
+        evidence_schema.get("$defs", {})
+        .get("finding", {})
+        .get("properties", {})
+        .get("severity", {})
+        .get("enum"),
+        EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
+        "Evidence Packet finding severity values",
+        errors,
+    )
+    check_equal(
+        evidence_schema.get("$defs", {})
+        .get("finding", {})
+        .get("properties", {})
+        .get("confidence", {})
+        .get("enum"),
+        EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES,
+        "Evidence Packet finding confidence values",
+        errors,
+    )
+    check_equal(
+        evidence_schema.get("$defs", {}).get("fact", {}).get("required", []),
+        EVIDENCE_PACKET_FACT_FIELDS,
+        "Evidence Packet fact fields",
+        errors,
+    )
+    check_equal(
+        evidence_schema.get("$defs", {})
+        .get("fact", {})
+        .get("properties", {})
+        .get("confidence", {})
+        .get("enum"),
+        EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+        "Evidence Packet fact confidence values",
+        errors,
+    )
 
     configured_modes = config.get("scout_policy", {}).get("allowed_expansion_modes")
     check_equal(
@@ -520,6 +636,34 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         config.get("scout_policy", {}).get("response_schema_version"),
         SUPPORTED_SCHEMA_VERSION,
         "configured Evidence Packet schema version",
+        errors,
+    )
+    check_equal(
+        config.get("scout_policy", {}).get("task_kinds"),
+        sorted(READ_ONLY_TASK_KINDS),
+        "configured PLAN task kinds",
+        errors,
+    )
+    configured_policy = config.get("plan_task_policy", {})
+    check_equal(
+        configured_policy.get("model"), PLAN_TASK_MODEL, "PLAN-task model", errors
+    )
+    check_equal(
+        configured_policy.get("reasoning_effort"),
+        PLAN_TASK_REASONING_EFFORT,
+        "PLAN-task reasoning effort",
+        errors,
+    )
+    check_equal(
+        configured_policy.get("max_concurrent_tasks"),
+        PLAN_TASK_MAX_CONCURRENT,
+        "PLAN-task concurrency",
+        errors,
+    )
+    check_equal(
+        configured_policy.get("max_estimated_input_tokens_per_round"),
+        PLAN_TASK_MAX_INPUT_TOKENS_PER_ROUND,
+        "PLAN-task input ceiling",
         errors,
     )
     check_equal(set(config.get("mode_profiles", {})), VALID_MODES, "mode profiles", errors)
@@ -536,22 +680,65 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
 
     try:
         agent_text = agent_path.read_text(encoding="utf-8")
+        implementer_text = implementer_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        errors.append(f"unable to read Scout Agent: {agent_path}: {exc}")
+        errors.append(f"unable to read PLAN/WORK Agent definitions: {exc}")
     else:
         if 'sandbox_mode = "read-only"' not in agent_text:
-            errors.append("Scout Agent does not declare sandbox_mode = 'read-only'")
-        if "bounded" in agent_text:
-            errors.append("Scout Agent mentions the forbidden bounded expansion mode")
+            errors.append("Evidence Task Agent does not declare sandbox_mode = 'read-only'")
+        for task_kind in sorted(READ_ONLY_TASK_KINDS):
+            if task_kind not in agent_text:
+                errors.append(f"Evidence Task Agent does not document task kind {task_kind!r}")
+        required_agent_terms = {
+            "low, medium, high, or critical",
+            "low, medium, or high",
+            "id, statement, provenance, and confidence",
+            "confirmed, inferred, or unverified",
+        }
+        for term in sorted(required_agent_terms):
+            if term not in agent_text:
+                errors.append(
+                    f"Evidence Task Agent is missing response-contract term: {term}"
+                )
+        if 'mode = "bounded"' in agent_text or "mode: bounded" in agent_text:
+            errors.append("Evidence Task Agent mentions the forbidden bounded expansion mode")
+        if "You are the implementation phase" in implementer_text:
+            errors.append(
+                "Implementation Agent retains the obsolete phase-owner identity"
+            )
+        if (
+            "You are the task-scoped implementation Agent used in the WORK phase"
+            not in implementer_text
+        ):
+            errors.append(
+                "Implementation Agent must identify as the task-scoped WORK Agent"
+            )
+        required_implementer_terms = {
+            "Single-writer coding agent",
+            "approved implementation contract",
+            "sole authority",
+            "Do not:",
+            "spawn another agent",
+            "Return BLOCKED",
+            "Return FAILED",
+            "Return DONE",
+            "STATUS: DONE",
+        }
+        for term in sorted(required_implementer_terms):
+            if term not in implementer_text:
+                errors.append(
+                    f"Implementation Agent is missing required WORK restriction: {term}"
+                )
 
     try:
         template_text = template_path.read_text(encoding="utf-8")
         skill_text = skill_path.read_text(encoding="utf-8")
         protocol_text = protocol_path.read_text(encoding="utf-8")
         adapter_text = adapter_path.read_text(encoding="utf-8")
+        adapter_contract_text = adapter_contract_path.read_text(encoding="utf-8")
         adapter_meta = read_adapter_front_matter(adapter_path)
-        config_text = config_path.read_text(encoding="utf-8")
-        example_text = example_path.read_text(encoding="utf-8")
+        config_path.read_text(encoding="utf-8")
+        example_path.read_text(encoding="utf-8")
     except (OSError, UnicodeError, ValueError) as exc:
         errors.append(f"contract parity source read failed: {exc}")
     else:
@@ -559,6 +746,12 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             adapter_meta,
             errors,
             expected_adapter_version=CODEX_ADAPTER_VERSION,
+        )
+        check_equal(
+            adapter_meta.get("optional_capabilities"),
+            ["read_only_scout_dispatch"],
+            "Codex verified optional PLAN-task capabilities",
+            errors,
         )
         if 'revision: {{REVISION}}' not in template_text:
             errors.append("implementation-contract template must retain the revision placeholder")
@@ -592,10 +785,88 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             "Codex adapter version",
             errors,
         )
-        if "gpt-5.4-mini" in config_text or "gpt-5.4-mini" in example_text:
-            errors.append("host-specific scout model defaults must not appear in config or examples")
-        if example_plan.get("discovery_authorization", {}).get("scout_model") != "user-approved-scout-model":
-            errors.append("example plan must use a non-catalog user-approved scout model placeholder")
+        check_equal(
+            _source_revision(adapter_contract_text, "Contract version"),
+            ADAPTER_CONTRACT_VERSION,
+            "Host Adapter Contract version",
+            errors,
+        )
+        required_live_evidence_terms = {
+            "Live evidence recorded 2026-09-03",
+            "real `lightweight_scout` micro",
+            "`repository-read` task",
+            "`gpt-5.6-luna/max`",
+            "`fork_context=false`",
+            "bounded task envelope",
+            "validate_evidence_packet.py` with exit `0`",
+            "used no expansion",
+            "byte-for-byte identical",
+            "does not by itself exercise expansion handling",
+        }
+        for term in sorted(required_live_evidence_terms):
+            if term not in adapter_text:
+                errors.append(
+                    f"Codex adapter is missing retained PLAN-task evidence: {term}"
+                )
+        required_adapter_contract_terms = {
+            "`PLAN` and `WORK`",
+            "host_identification",
+            "planner_binding",
+            "model_validation",
+            "worker_dispatch",
+            "permission_inheritance",
+            "lifecycle_control",
+            "progress_reporting",
+            "result_relay",
+            "version_control_management",
+            "identify_host",
+            "bind_planner",
+            "validate_model",
+            "dispatch_worker",
+            "inherit_permissions",
+            "control_lifecycle",
+            "report_progress",
+            "relay_result",
+            "manage_version_control",
+            "requirement-research",
+            "repository-read",
+            "dependency-check",
+            "evidence-analysis",
+            "`lightweight_scout`",
+            "`implementation`",
+            "`direct`, `micro`, or `batch`",
+            "plan_task_authorization",
+            "gpt-5.6-luna",
+            "max_concurrent_tasks",
+            "12,000",
+            "pass_parent_transcript",
+            "read_only_scout_dispatch",
+            "dispatch_scout",
+            "no complete parent transcript",
+            "without granting writes",
+            "finding severity",
+            "fact fields",
+            "direct PLAN handling",
+        }
+        for term in sorted(required_adapter_contract_terms):
+            if term not in adapter_contract_text:
+                errors.append(
+                    f"Host Adapter Contract is missing required PLAN-task term: {term}"
+                )
+        if "discovery_authorization.authorized" in adapter_contract_text:
+            errors.append(
+                "Host Adapter Contract retains obsolete discovery_authorization authorization semantics"
+            )
+        if "Phase 1 Scout" in adapter_contract_text:
+            errors.append(
+                "Host Adapter Contract retains obsolete Phase 1 Scout terminology"
+            )
+        if example_plan.get("plan_task_authorization", {}).get("model") != PLAN_TASK_MODEL:
+            errors.append("example plan must use the approved PLAN-task model")
+        if example_plan.get("plan_task_authorization", {}).get("reasoning_effort") != PLAN_TASK_REASONING_EFFORT:
+            errors.append("example plan must use the approved PLAN-task reasoning effort")
+        if example_plan.get("routing", {}).get("decision") != "batch":
+            errors.append("example plan must exercise the validated batch routing path")
         if 'CODEX_HOME' not in skill_text or 'Path.home() / ".codex"' not in skill_text:
             errors.append("Skill deployment guidance must resolve CODEX_HOME before the default Codex root")
 
@@ -604,7 +875,7 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         errors.extend(f"example plan: {error}" for error in plan_report["errors"])
     else:
         example_budget = example_plan["budget"]
-        token_ceiling = example_plan["discovery_authorization"]["token_ceiling"]
+        token_ceiling = example_plan["plan_task_authorization"]["token_ceiling"]
         max_total = example_budget["max_total_dispatched_tokens"]
         worst_case = plan_report["metrics"]["worst_case_total_input_tokens"]
         if not worst_case <= token_ceiling <= max_total:
@@ -641,6 +912,42 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             errors,
         )
         check_equal(
+            response_contract.get("task_kinds"),
+            sorted(READ_ONLY_TASK_KINDS),
+            "generated response task kinds",
+            errors,
+        )
+        check_equal(
+            response_contract.get("finding_severity_values"),
+            EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
+            "generated finding severity values",
+            errors,
+        )
+        check_equal(
+            response_contract.get("finding_confidence_values"),
+            EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES,
+            "generated finding confidence values",
+            errors,
+        )
+        check_equal(
+            response_contract.get("evidence_fields"),
+            EVIDENCE_PACKET_EVIDENCE_FIELDS,
+            "generated evidence fields",
+            errors,
+        )
+        check_equal(
+            response_contract.get("fact_fields"),
+            EVIDENCE_PACKET_FACT_FIELDS,
+            "generated fact fields",
+            errors,
+        )
+        check_equal(
+            response_contract.get("fact_confidence_values"),
+            EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+            "generated fact confidence values",
+            errors,
+        )
+        check_equal(
             response_contract.get("required_fields"),
             EVIDENCE_PACKET_REQUIRED_FIELDS,
             "generated response required fields",
@@ -665,6 +972,127 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             errors,
         )
 
+        micro_fixture = {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
+            "envelope_type": "micro-task",
+            "plan_id": "micro-fixture",
+            "task_id": "micro-repository-read",
+            "task_kind": "repository-read",
+            "goal": "Read one source for a bounded planning fact.",
+            "objective": "Identify the configured entry point.",
+            "query": "Which function defines the entry point?",
+            "sources": [
+                {
+                    "id": "src-micro",
+                    "uri": "src/example.py",
+                    "selector": {"type": "symbol", "name": "main"},
+                    "estimated_tokens": 120,
+                    "purpose": "Entry-point definition",
+                }
+            ],
+            "deliverable": "One cited fact.",
+            "stop_conditions": ["The function is located."],
+            "evidence_required": True,
+            "allowed_expansion": {"mode": "deny", "max_additional_tokens": 0},
+            "budget": {
+                "estimated_input_tokens": 500,
+                "max_input_tokens": 1000,
+                "max_result_tokens": 300,
+            },
+            "economics": {
+                "planner_context_savings": 900,
+                "delegated_input_tokens": 500,
+                "estimated_result_tokens": 120,
+                "coordination_overhead_tokens": 200,
+                "weighted_cost_savings": 50,
+                "weighted_cost_rationale": "The bounded read removes a larger Planner context slice; total tokens may increase.",
+                "independently_describable": True,
+                "evidence_already_present": False,
+                "continuous_planner_judgment": False,
+            },
+            "plan_task_policy": configured_policy,
+            "plan_task_authorization": {
+                "authorized": True,
+                "model": PLAN_TASK_MODEL,
+                "reasoning_effort": PLAN_TASK_REASONING_EFFORT,
+                "task_count": 1,
+                "token_ceiling": 1000,
+            },
+            "model_override": {
+                "model": PLAN_TASK_MODEL,
+                "reasoning_effort": PLAN_TASK_REASONING_EFFORT,
+                "explicit": True,
+            },
+            "response_contract": {
+                "schema_version": SUPPORTED_SCHEMA_VERSION,
+                "packet_type": "subagent-result",
+                "schema_ref": "assets/context-routing/evidence-packet.schema.json",
+                "validation_authority": "scripts/validate_evidence_packet.py",
+                "task_kinds": sorted(READ_ONLY_TASK_KINDS),
+                "finding_severity_values": EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
+                "finding_confidence_values": EVIDENCE_PACKET_FINDING_CONFIDENCE_VALUES,
+                "evidence_fields": EVIDENCE_PACKET_EVIDENCE_FIELDS,
+                "fact_fields": EVIDENCE_PACKET_FACT_FIELDS,
+                "fact_confidence_values": EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+            },
+            "execution_rules": {
+                "read_only": True,
+                "write_authority": "none",
+                "external_mutations": "forbidden",
+                "pass_parent_transcript": False,
+                "may_make_decisions": False,
+                "may_author_contract": False,
+                "may_spawn_agents": False,
+            },
+        }
+        micro_report = validate_micro_task(micro_fixture, config_path)
+        if not micro_report["valid"]:
+            errors.extend(f"micro fixture: {error}" for error in micro_report["errors"])
+        else:
+            generated_micro = build_micro_task_packet(
+                micro_fixture, micro_report["metrics"]
+            )
+            check_equal(
+                generated_micro.get("packet_type"),
+                "plan-task",
+                "generated micro packet type",
+                errors,
+            )
+            check_equal(
+                generated_micro.get("task_kind"),
+                "repository-read",
+                "generated micro task kind",
+                errors,
+            )
+
+        direct_fixture = {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
+            "envelope_type": "routing-decision",
+            "plan_id": "direct-fixture",
+            "goal": "Use evidence already in the Planner context.",
+            "routing": {
+                "decision": "direct",
+                "estimated_files": 1,
+                "estimated_tokens": 50,
+                "multiple_information_boundaries": False,
+                "basis": "The answer is already present.",
+                "economics": {
+                    "planner_context_savings": 0,
+                    "delegated_input_tokens": 0,
+                    "estimated_result_tokens": 0,
+                    "coordination_overhead_tokens": 200,
+                    "weighted_cost_savings": 0,
+                    "weighted_cost_rationale": "Direct handling avoids coordination.",
+                    "independently_describable": False,
+                    "evidence_already_present": True,
+                    "continuous_planner_judgment": False,
+                },
+            },
+        }
+        direct_report = validate_direct_routing(direct_fixture, config_path)
+        if not direct_report["valid"]:
+            errors.extend(f"direct fixture: {error}" for error in direct_report["errors"])
+
     return {
         "valid": not errors,
         "errors": errors,
@@ -674,6 +1102,8 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             str(config_path),
             str(example_path),
             str(agent_path),
+            str(implementer_path),
+            str(adapter_contract_path),
         ],
     }
 

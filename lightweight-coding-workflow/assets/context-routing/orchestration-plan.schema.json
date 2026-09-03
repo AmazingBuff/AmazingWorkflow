@@ -1,82 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:lightweight-coding-workflow:orchestration-plan-schema:1.1",
-  "title": "Scout Orchestration Plan",
+  "$id": "urn:lightweight-coding-workflow:orchestration-plan-schema:2.0",
+  "title": "PLAN routing and task envelope",
   "type": "object",
   "additionalProperties": true,
-  "required": [
-    "schema_version",
-    "plan_id",
-    "goal",
-    "mode",
-    "configuration",
-    "routing",
-    "discovery_authorization",
-    "budget",
-    "shared_context",
-    "sources",
-    "tasks",
-    "merge"
+  "oneOf": [
+    {"$ref": "#/$defs/directRouting"},
+    {"$ref": "#/$defs/microTask"},
+    {"$ref": "#/$defs/batchPlan"}
   ],
-  "properties": {
-    "schema_version": {
-      "const": "1.1"
-    },
-    "plan_id": {
-      "$ref": "#/$defs/identifier"
-    },
-    "goal": {
-      "type": "string",
-      "minLength": 1
-    },
-    "mode": {
-      "enum": [
-        "lean",
-        "balanced",
-        "independent-review",
-        "high-assurance"
-      ]
-    },
-    "configuration": {
-      "$ref": "#/$defs/configuration"
-    },
-    "routing": {
-      "$ref": "#/$defs/routing"
-    },
-    "discovery_authorization": {
-      "$ref": "#/$defs/discoveryAuthorization"
-    },
-    "assumptions": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "default": []
-    },
-    "budget": {
-      "$ref": "#/$defs/budget"
-    },
-    "shared_context": {
-      "$ref": "#/$defs/sharedContext"
-    },
-    "sources": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/source"
-      }
-    },
-    "tasks": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/task"
-      }
-    },
-    "merge": {
-      "$ref": "#/$defs/merge"
-    }
-  },
   "$defs": {
     "identifier": {
       "type": "string",
@@ -84,379 +16,239 @@
     },
     "stringArray": {
       "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      }
+      "items": {"type": "string", "minLength": 1}
     },
-    "budget": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": [
-        "max_subagents",
-        "max_input_tokens_per_task",
-        "max_total_dispatched_tokens",
-        "max_accidental_overlap_ratio",
-        "max_shared_source_tokens_per_task"
-      ],
-      "properties": {
-        "max_subagents": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_input_tokens_per_task": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_total_dispatched_tokens": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "max_accidental_overlap_ratio": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "max_shared_source_tokens_per_task": {
-          "type": "integer",
-          "minimum": 0
-        }
-      }
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
     },
-    "configuration": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": [
-        "id",
-        "source",
-        "revision",
-        "digest"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "source": {
-          "type": "string",
-          "minLength": 1
-        },
-        "revision": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "digest": {
-          "type": "string",
-          "pattern": "^sha256:[0-9a-fA-F]{64}$"
-        }
-      }
-    },
-    "routing": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": [
-        "decision",
-        "estimated_files",
-        "estimated_tokens",
-        "multiple_information_boundaries",
-        "basis"
-      ],
-      "properties": {
-        "decision": {
-          "const": "orchestrated"
-        },
-        "estimated_files": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "estimated_tokens": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "multiple_information_boundaries": {
-          "type": "boolean"
-        },
-        "basis": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "discoveryAuthorization": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": [
-        "authorized",
-        "scout_model",
-        "packet_count",
-        "token_ceiling"
-      ],
-      "properties": {
-        "authorized": {
-          "const": true
-        },
-        "scout_model": {
-          "type": "string",
-          "minLength": 1
-        },
-        "packet_count": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "token_ceiling": {
-          "type": "integer",
-          "minimum": 1
-        }
-      }
-    },
-    "fact": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": [
-        "id",
-        "statement",
-        "provenance",
-        "confidence"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "statement": {
-          "type": "string",
-          "minLength": 1
-        },
-        "provenance": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "confidence": {
-          "enum": [
-            "confirmed",
-            "inferred",
-            "unverified"
-          ]
-        },
-        "always_share": {
-          "type": "boolean"
-        }
-      }
-    },
-    "sharedContext": {
-      "type": "object",
-      "additionalProperties": true,
-      "required": [
-        "facts",
-        "constraints",
-        "source_ids"
-      ],
-      "properties": {
-        "facts": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/fact"
-          }
-        },
-        "constraints": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "source_ids": {
-          "$ref": "#/$defs/stringArray"
-        }
-      }
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
     },
     "selector": {
       "oneOf": [
         {
           "type": "object",
-          "required": [
-            "type",
-            "start",
-            "end"
-          ],
+          "required": ["type", "start", "end"],
           "properties": {
-            "type": {
-              "const": "lines"
-            },
-            "start": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "end": {
-              "type": "integer",
-              "minimum": 1
-            }
+            "type": {"const": "lines"},
+            "start": {"type": "integer", "minimum": 1},
+            "end": {"type": "integer", "minimum": 1}
           },
           "additionalProperties": true
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "start",
-            "end"
-          ],
+          "required": ["type", "start", "end"],
           "properties": {
-            "type": {
-              "const": "pages"
-            },
-            "start": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "end": {
-              "type": "integer",
-              "minimum": 1
-            }
+            "type": {"const": "pages"},
+            "start": {"type": "integer", "minimum": 1},
+            "end": {"type": "integer", "minimum": 1}
           },
           "additionalProperties": true
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "name"
-          ],
+          "required": ["type", "name"],
           "properties": {
-            "type": {
-              "const": "symbol"
-            },
-            "name": {
-              "type": "string",
-              "minLength": 1
-            }
+            "type": {"const": "symbol"},
+            "name": {"type": "string", "minLength": 1}
           },
           "additionalProperties": true
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "heading"
-          ],
+          "required": ["type", "heading"],
           "properties": {
-            "type": {
-              "const": "section"
-            },
-            "heading": {
-              "type": "string",
-              "minLength": 1
-            }
+            "type": {"const": "section"},
+            "heading": {"type": "string", "minLength": 1}
           },
           "additionalProperties": true
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "key"
-          ],
+          "required": ["type", "key"],
           "properties": {
-            "type": {
-              "const": "object"
-            },
-            "key": {
-              "type": "string",
-              "minLength": 1
-            }
+            "type": {"const": "object"},
+            "key": {"type": "string", "minLength": 1}
           },
           "additionalProperties": true
         },
         {
           "type": "object",
-          "required": [
-            "type",
-            "query"
-          ],
+          "required": ["type", "query"],
           "properties": {
-            "type": {
-              "const": "query"
-            },
-            "query": {
-              "type": "string",
-              "minLength": 1
-            },
-            "top_k": {
-              "type": "integer",
-              "minimum": 1
-            }
+            "type": {"const": "query"},
+            "query": {"type": "string", "minLength": 1},
+            "top_k": {"type": "integer", "minimum": 1}
           },
           "additionalProperties": true
         },
         {
           "type": "object",
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "whole"
-            }
-          },
+          "required": ["type"],
+          "properties": {"type": {"const": "whole"}},
           "additionalProperties": true
         }
       ]
     },
     "source": {
       "type": "object",
-      "additionalProperties": true,
+      "required": ["id", "uri", "selector", "estimated_tokens", "purpose"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "uri": {"type": "string", "minLength": 1},
+        "selector": {"$ref": "#/$defs/selector"},
+        "estimated_tokens": {"$ref": "#/$defs/positiveInteger"},
+        "purpose": {"type": "string", "minLength": 1},
+        "summary": {"type": "string"},
+        "content_hash": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "economics": {
+      "type": "object",
       "required": [
-        "id",
-        "uri",
-        "selector",
-        "estimated_tokens",
-        "purpose"
+        "planner_context_savings",
+        "delegated_input_tokens",
+        "estimated_result_tokens",
+        "coordination_overhead_tokens",
+        "weighted_cost_savings",
+        "weighted_cost_rationale",
+        "independently_describable",
+        "evidence_already_present",
+        "continuous_planner_judgment"
       ],
       "properties": {
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "uri": {
-          "type": "string",
-          "minLength": 1
-        },
-        "selector": {
-          "$ref": "#/$defs/selector"
-        },
-        "estimated_tokens": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "purpose": {
-          "type": "string",
-          "minLength": 1
-        },
-        "summary": {
-          "type": "string"
-        },
-        "content_hash": {
-          "type": "string"
-        }
-      }
+        "planner_context_savings": {"$ref": "#/$defs/nonNegativeInteger"},
+        "delegated_input_tokens": {"$ref": "#/$defs/nonNegativeInteger"},
+        "estimated_result_tokens": {"$ref": "#/$defs/nonNegativeInteger"},
+        "coordination_overhead_tokens": {"$ref": "#/$defs/nonNegativeInteger"},
+        "weighted_cost_savings": {"type": "number"},
+        "weighted_cost_rationale": {"type": "string", "minLength": 1},
+        "independently_describable": {"type": "boolean"},
+        "evidence_already_present": {"type": "boolean"},
+        "continuous_planner_judgment": {"type": "boolean"},
+        "total_token_savings_claimed": {"const": false}
+      },
+      "additionalProperties": true
+    },
+    "planTaskPolicy": {
+      "type": "object",
+      "required": [
+        "model",
+        "reasoning_effort",
+        "max_concurrent_tasks",
+        "max_estimated_input_tokens_per_round",
+        "pass_parent_transcript",
+        "sandbox_mode",
+        "allow_writes",
+        "allow_external_mutations",
+        "user_visible_dispatch_notice",
+        "per_task_approval_required",
+        "over_policy"
+      ],
+      "properties": {
+        "model": {"const": "gpt-5.6-luna"},
+        "reasoning_effort": {"const": "max"},
+        "max_concurrent_tasks": {"const": 2},
+        "max_estimated_input_tokens_per_round": {"const": 12000},
+        "pass_parent_transcript": {"const": false},
+        "sandbox_mode": {"const": "read-only"},
+        "allow_writes": {"const": false},
+        "allow_external_mutations": {"const": false},
+        "user_visible_dispatch_notice": {"const": true},
+        "per_task_approval_required": {"const": false},
+        "over_policy": {"const": "user-approval-or-direct-fallback"}
+      },
+      "additionalProperties": true
+    },
+    "planTaskAuthorization": {
+      "type": "object",
+      "required": ["authorized", "model", "reasoning_effort", "task_count", "token_ceiling"],
+      "properties": {
+        "authorized": {"const": true},
+        "model": {"const": "gpt-5.6-luna"},
+        "reasoning_effort": {"const": "max"},
+        "task_count": {"$ref": "#/$defs/positiveInteger"},
+        "token_ceiling": {"$ref": "#/$defs/positiveInteger"}
+      },
+      "additionalProperties": true
+    },
+    "configuration": {
+      "type": "object",
+      "required": ["id", "source", "revision", "digest"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "source": {"type": "string", "minLength": 1},
+        "revision": {"$ref": "#/$defs/positiveInteger"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-fA-F]{64}$"}
+      },
+      "additionalProperties": true
+    },
+    "routing": {
+      "type": "object",
+      "required": [
+        "decision",
+        "estimated_files",
+        "estimated_tokens",
+        "multiple_information_boundaries",
+        "basis",
+        "economics"
+      ],
+      "properties": {
+        "decision": {"enum": ["direct", "micro", "batch"]},
+        "estimated_files": {"$ref": "#/$defs/nonNegativeInteger"},
+        "estimated_tokens": {"$ref": "#/$defs/nonNegativeInteger"},
+        "multiple_information_boundaries": {"type": "boolean"},
+        "basis": {"type": "string", "minLength": 1},
+        "economics": {"$ref": "#/$defs/economics"}
+      },
+      "additionalProperties": true
+    },
+    "batchRouting": {
+      "allOf": [
+        {"$ref": "#/$defs/routing"},
+        {"properties": {"decision": {"const": "batch"}}}
+      ]
+    },
+    "fact": {
+      "type": "object",
+      "required": ["id", "statement", "provenance", "confidence"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "statement": {"type": "string", "minLength": 1},
+        "provenance": {"$ref": "#/$defs/stringArray"},
+        "confidence": {"enum": ["confirmed", "inferred", "unverified"]},
+        "always_share": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "sharedContext": {
+      "type": "object",
+      "required": ["facts", "constraints", "source_ids"],
+      "properties": {
+        "facts": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
+        "constraints": {"$ref": "#/$defs/stringArray"},
+        "source_ids": {"$ref": "#/$defs/stringArray"}
+      },
+      "additionalProperties": true
     },
     "expansionPolicy": {
       "type": "object",
-      "additionalProperties": true,
-      "required": [
-        "mode",
-        "max_additional_tokens"
-      ],
+      "required": ["mode", "max_additional_tokens"],
       "properties": {
-        "mode": {
-          "enum": [
-            "deny",
-            "request"
-          ]
-        },
-        "max_additional_tokens": {
-          "type": "integer",
-          "minimum": 0
-        }
-      }
+        "mode": {"enum": ["deny", "request"]},
+        "max_additional_tokens": {"$ref": "#/$defs/nonNegativeInteger"}
+      },
+      "additionalProperties": true
     },
     "task": {
       "type": "object",
-      "additionalProperties": true,
       "required": [
         "id",
+        "task_kind",
         "agent_role",
         "objective",
         "dependencies",
@@ -469,72 +261,238 @@
         "stop_conditions"
       ],
       "properties": {
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "agent_role": {
-          "type": "string",
-          "minLength": 1
-        },
-        "objective": {
-          "type": "string",
-          "minLength": 1
-        },
-        "dependencies": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "source_ids": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "questions": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "deliverable": {
-          "type": "string",
-          "minLength": 1
-        },
-        "evidence_required": {
-          "type": "boolean"
-        },
-        "intentional_overlap": {
-          "type": "boolean"
-        },
-        "capabilities": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "allowed_expansion": {
-          "$ref": "#/$defs/expansionPolicy"
-        },
-        "stop_conditions": {
-          "$ref": "#/$defs/stringArray"
-        },
-        "inherit_shared_sources": {
-          "type": "boolean",
-          "default": true
-        }
-      }
+        "id": {"$ref": "#/$defs/identifier"},
+        "agent_id": {"type": "string", "minLength": 1},
+        "task_kind": {"enum": ["requirement-research", "repository-read", "dependency-check", "evidence-analysis", "implementation"]},
+        "agent_role": {"type": "string", "minLength": 1},
+        "objective": {"type": "string", "minLength": 1},
+        "dependencies": {"$ref": "#/$defs/stringArray"},
+        "source_ids": {"$ref": "#/$defs/stringArray"},
+        "questions": {"$ref": "#/$defs/stringArray"},
+        "deliverable": {"type": "string", "minLength": 1},
+        "evidence_required": {"type": "boolean"},
+        "intentional_overlap": {"type": "boolean"},
+        "capabilities": {"$ref": "#/$defs/stringArray"},
+        "allowed_expansion": {"$ref": "#/$defs/expansionPolicy"},
+        "stop_conditions": {"$ref": "#/$defs/stringArray"},
+        "inherit_shared_sources": {"type": "boolean", "default": true}
+      },
+      "additionalProperties": true
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "max_subagents",
+        "max_input_tokens_per_task",
+        "max_total_dispatched_tokens",
+        "max_accidental_overlap_ratio",
+        "max_shared_source_tokens_per_task"
+      ],
+      "properties": {
+        "max_subagents": {"$ref": "#/$defs/positiveInteger"},
+        "max_input_tokens_per_task": {"$ref": "#/$defs/positiveInteger"},
+        "max_total_dispatched_tokens": {"$ref": "#/$defs/positiveInteger"},
+        "max_accidental_overlap_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "max_shared_source_tokens_per_task": {"$ref": "#/$defs/nonNegativeInteger"}
+      },
+      "additionalProperties": true
     },
     "merge": {
       "type": "object",
-      "additionalProperties": true,
+      "required": ["strategy", "conflict_policy", "final_checks"],
+      "properties": {
+        "strategy": {"type": "string", "minLength": 1},
+        "conflict_policy": {"type": "string", "minLength": 1},
+        "final_checks": {"$ref": "#/$defs/stringArray"}
+      },
+      "additionalProperties": true
+    },
+    "responseContract": {
+      "type": "object",
       "required": [
-        "strategy",
-        "conflict_policy",
-        "final_checks"
+        "schema_version",
+        "packet_type",
+        "schema_ref",
+        "validation_authority",
+        "task_kinds",
+        "finding_severity_values",
+        "finding_confidence_values",
+        "evidence_fields",
+        "fact_fields",
+        "fact_confidence_values"
       ],
       "properties": {
-        "strategy": {
-          "type": "string",
-          "minLength": 1
+        "schema_version": {"const": "2.0"},
+        "packet_type": {"const": "subagent-result"},
+        "schema_ref": {"const": "assets/context-routing/evidence-packet.schema.json"},
+        "validation_authority": {"const": "scripts/validate_evidence_packet.py"},
+        "task_kinds": {
+          "const": ["dependency-check", "evidence-analysis", "repository-read", "requirement-research"]
         },
-        "conflict_policy": {
-          "type": "string",
-          "minLength": 1
+        "finding_severity_values": {
+          "const": ["critical", "high", "low", "medium"]
         },
-        "final_checks": {
-          "$ref": "#/$defs/stringArray"
+        "finding_confidence_values": {
+          "const": ["high", "low", "medium"]
+        },
+        "evidence_fields": {
+          "const": ["source_id", "locator", "note"]
+        },
+        "fact_fields": {
+          "const": ["id", "statement", "provenance", "confidence"]
+        },
+        "fact_confidence_values": {
+          "const": ["confirmed", "inferred", "unverified"]
         }
-      }
+      },
+      "additionalProperties": true
+    },
+    "executionRules": {
+      "type": "object",
+      "required": [
+        "read_only",
+        "write_authority",
+        "external_mutations",
+        "pass_parent_transcript",
+        "may_make_decisions",
+        "may_author_contract",
+        "may_spawn_agents"
+      ],
+      "properties": {
+        "read_only": {"const": true},
+        "write_authority": {"const": "none"},
+        "external_mutations": {"const": "forbidden"},
+        "pass_parent_transcript": {"const": false},
+        "may_make_decisions": {"const": false},
+        "may_author_contract": {"const": false},
+        "may_spawn_agents": {"const": false}
+      },
+      "additionalProperties": true
+    },
+    "batchPlan": {
+      "type": "object",
+      "required": [
+        "envelope_type",
+        "schema_version",
+        "plan_id",
+        "goal",
+        "mode",
+        "configuration",
+        "routing",
+        "plan_task_authorization",
+        "plan_task_policy",
+        "budget",
+        "shared_context",
+        "sources",
+        "tasks",
+        "merge"
+      ],
+      "properties": {
+        "envelope_type": {"const": "batch-plan"},
+        "schema_version": {"const": "2.0"},
+        "plan_id": {"$ref": "#/$defs/identifier"},
+        "goal": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["lean", "balanced", "independent-review", "high-assurance"]},
+        "configuration": {"$ref": "#/$defs/configuration"},
+        "routing": {"$ref": "#/$defs/batchRouting"},
+        "plan_task_authorization": {"$ref": "#/$defs/planTaskAuthorization"},
+        "plan_task_policy": {"$ref": "#/$defs/planTaskPolicy"},
+        "assumptions": {"$ref": "#/$defs/stringArray"},
+        "budget": {"$ref": "#/$defs/budget"},
+        "shared_context": {"$ref": "#/$defs/sharedContext"},
+        "sources": {"type": "array", "items": {"$ref": "#/$defs/source"}},
+        "tasks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/task"}},
+        "merge": {"$ref": "#/$defs/merge"}
+      },
+      "additionalProperties": true
+    },
+    "microBudget": {
+      "type": "object",
+      "required": ["estimated_input_tokens", "max_input_tokens", "max_result_tokens"],
+      "properties": {
+        "estimated_input_tokens": {"$ref": "#/$defs/positiveInteger"},
+        "max_input_tokens": {"$ref": "#/$defs/positiveInteger"},
+        "max_result_tokens": {"$ref": "#/$defs/positiveInteger"}
+      },
+      "additionalProperties": true
+    },
+    "microTask": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "envelope_type",
+        "plan_id",
+        "task_id",
+        "task_kind",
+        "goal",
+        "objective",
+        "query",
+        "sources",
+        "deliverable",
+        "stop_conditions",
+        "evidence_required",
+        "allowed_expansion",
+        "budget",
+        "economics",
+        "plan_task_policy",
+        "plan_task_authorization",
+        "model_override",
+        "response_contract",
+        "execution_rules"
+      ],
+      "properties": {
+        "schema_version": {"const": "2.0"},
+        "envelope_type": {"const": "micro-task"},
+        "plan_id": {"$ref": "#/$defs/identifier"},
+        "task_id": {"$ref": "#/$defs/identifier"},
+        "task_kind": {"enum": ["requirement-research", "repository-read", "dependency-check", "evidence-analysis"]},
+        "agent_id": {"type": "string", "minLength": 1},
+        "agent_role": {"type": "string", "minLength": 1},
+        "goal": {"type": "string", "minLength": 1},
+        "objective": {"type": "string", "minLength": 1},
+        "query": {"type": "string", "minLength": 1},
+        "questions": {"$ref": "#/$defs/stringArray"},
+        "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+        "deliverable": {"type": "string", "minLength": 1},
+        "stop_conditions": {"$ref": "#/$defs/stringArray"},
+        "evidence_required": {"const": true},
+        "allowed_expansion": {"$ref": "#/$defs/expansionPolicy"},
+        "budget": {"$ref": "#/$defs/microBudget"},
+        "economics": {"$ref": "#/$defs/economics"},
+        "plan_task_policy": {"$ref": "#/$defs/planTaskPolicy"},
+        "plan_task_authorization": {"$ref": "#/$defs/planTaskAuthorization"},
+        "model_override": {
+          "type": "object",
+          "required": ["model", "reasoning_effort", "explicit"],
+          "properties": {
+            "model": {"const": "gpt-5.6-luna"},
+            "reasoning_effort": {"const": "max"},
+            "explicit": {"const": true}
+          },
+          "additionalProperties": true
+        },
+        "configuration": {"$ref": "#/$defs/configuration"},
+        "response_contract": {"$ref": "#/$defs/responseContract"},
+        "execution_rules": {"$ref": "#/$defs/executionRules"}
+      },
+      "additionalProperties": true
+    },
+    "directRouting": {
+      "type": "object",
+      "required": ["schema_version", "envelope_type", "plan_id", "goal", "routing"],
+      "properties": {
+        "schema_version": {"const": "2.0"},
+        "envelope_type": {"const": "routing-decision"},
+        "plan_id": {"$ref": "#/$defs/identifier"},
+        "goal": {"type": "string", "minLength": 1},
+        "routing": {
+          "allOf": [
+            {"$ref": "#/$defs/routing"},
+            {"properties": {"decision": {"const": "direct"}}}
+          ]
+        }
+      },
+      "additionalProperties": true
     }
   }
 }

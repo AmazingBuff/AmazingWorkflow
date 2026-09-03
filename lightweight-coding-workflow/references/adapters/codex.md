@@ -2,8 +2,8 @@
 host_adapter: "codex"
 host_id: "codex"
 display_name: "Codex Host Adapter"
-protocol_version: "0.6"
-adapter_version: "0.6"
+protocol_version: "0.7"
+adapter_version: "0.7"
 support_state: "VERIFIED"
 supported_surfaces:
   - "desktop"
@@ -19,34 +19,36 @@ capabilities:
   - "progress_reporting"
   - "result_relay"
   - "version_control_management"
-verified_on: "2026-08-25"
+optional_capabilities:
+  - "read_only_scout_dispatch"
+verified_on: "2026-09-03"
 ---
 
 # Codex Host Adapter
 
-Implementation dispatch eligibility: **yes**, only after contract/model approval and immediate capability revalidation. This adapter intentionally declares no optional Scout-dispatch capability, so the Planner uses the Context Routing fast lane for discovery.
+Implementation dispatch eligibility: **yes**, only after contract/model approval and immediate capability revalidation. The optional PLAN-task dispatch mapping is now declared after the parent Planner's live forward-test evidence; its verified scope and remaining limits are recorded below.
 
-This adapter is the sole `VERIFIED` protocol `0.6` mapping. It implements the [Host Adapter Contract](../adapter-contract.md) for the [Core protocol](../protocol.md), carries feature-documentation evidence without adding a capability, and preserves the model-neutral custom Agent. The optional read-only Scout capability is not implied by worker dispatch.
+This adapter is the sole `VERIFIED` protocol `0.7` mapping. It implements the [Host Adapter Contract](../adapter-contract.md) for the [Core protocol](../protocol.md), carries feature-documentation evidence, and preserves the model-neutral custom Agents. The read-only PLAN-task capability is separately verified and is not implied by WORK dispatch.
 
 ## Compatibility
 
 | Item | Mapping |
 | --- | --- |
-| Core protocol | Exact version `0.6` |
-| Adapter | `codex` version `0.6` |
+| Core protocol | Exact version `0.7` |
+| Adapter | `codex` version `0.7` |
 | Planner | Current Codex main task and its selected model |
 | Worker | Codex custom agent `lightweight_implementer` |
 | Worker source | [lightweight_implementer.toml](../../agents/lightweight_implementer.toml) |
-| Scout | Not claimed by this adapter; use direct Planner inspection (fast lane) |
+| PLAN task | Verified task-scoped read-only `lightweight_scout` mapping for the tested Codex micro-task path; direct PLAN handling remains the fallback for unsupported or over-policy cases |
 | Contract asset | Loaded Skill's `assets/implementation-contract.md` |
 | Feature documentation | Loaded convention and template plus contract-selected repository paths |
 | Coding-rule components | Loaded Skill's `assets/coding-rules/**`, listed by absolute path in the contract |
 | Task records | Repository-local `.codex/task-runs/<task-id>/implementation-contract-v<revision>.md` |
 | Result schemas | Core `DONE`, `BLOCKED`, and `FAILED` Markdown schemas with `DOCUMENTATION` evidence |
 
-Protocol `0.6` requires exact adapter metadata. Older approved contracts remain immutable and continue only with matching historical resources or a newly approved revision.
+Protocol `0.7` requires exact adapter metadata. Older approved contracts remain immutable and continue only with matching historical resources or a newly approved revision.
 
-Workflow revision compatibility: contracts approved under `0.6` remain immutable and use matching historical Skill, Core, and adapter resources. Existing approved `0.6.1` contracts may continue with matching historical `0.6.1` resources; reapproval is required only to run a task under workflow revision `0.6.2` and its canonical UTF-8/LF text-digest semantics. New `0.6.2` contracts must carry verified workflow revision, protocol SHA-256, and adapter SHA-256 evidence; Codex adapter version remains `0.6`. Text-resource evidence uses the canonical UTF-8/LF digest representation documented by the Core; binary and generated packet artifacts retain raw-byte hashing.
+Workflow revision compatibility: contracts approved under `0.6.x` remain immutable and use matching historical Skill, Core, adapter, schema, and configuration resources. New `0.7.0` contracts carry verified `workflow_revision`, `protocol_sha256`, and `adapter_sha256` evidence; Codex adapter version is `0.7`. Text-resource evidence uses the canonical UTF-8/LF digest representation documented by the Core; binary and generated packet artifacts retain raw-byte hashing.
 
 ## Operation map
 
@@ -61,6 +63,7 @@ Workflow revision compatibility: contracts approved under `0.6` remain immutable
 | Progress reporting | `report_progress` | Observe the subagent task and relay concise progress while raw logs remain with the worker. | `FAILED` only when progress/result state cannot be recovered after evidence-based attempts. |
 | Result relay | `relay_result` | Receive the worker's final Markdown and validate its status plus every required Core section, including `DOCUMENTATION`. | Continue the same worker for an in-scope malformed result; otherwise `FAILED`. |
 | Version-control management | `manage_version_control` | Use read-only Git commands for baselines; use exact-path staging and commit only under exact contract authority; push only under separate remote/refspec authority. | `BLOCKED` for authority, overlap, or baseline conflicts; `FAILED` for an unrecoverable authorized Git operation. |
+| PLAN task dispatch (optional) | `read_only_scout_dispatch` | Verified Codex read-only `lightweight_scout` invocation with an explicit per-task `gpt-5.6-luna/max` override, exact micro/batch task envelope, and no parent transcript. | `CAPABILITY_UNAVAILABLE` when the host cannot provide the verified read-only mechanism or model; direct PLAN fallback when policy limits are exceeded. |
 
 ## `identify_host`
 
@@ -97,7 +100,7 @@ If Codex cannot expose or accept the selected model or effort, return to plannin
 
 Preconditions:
 
-- the contract is `APPROVED` and records `protocol_version: "0.6"`, `host_adapter: "codex"`, and `adapter_version: "0.6"`;
+- the contract is `APPROVED` and records `protocol_version: "0.7"`, `host_adapter: "codex"`, and `adapter_version: "0.7"`;
 - the contract records a populated `workflow_revision`, `protocol_sha256`, and `adapter_sha256` matching the exact loaded Skill, Core protocol, and Codex adapter files;
 - no other write-capable subagent owns the worktree;
 - model and permission validation passed;
@@ -179,10 +182,38 @@ Push is separate. Run `git push <approved-remote> <approved-source>:<approved-de
 
 Return the Core version-control evidence fields without rewriting status. A denied authority, ownership conflict, or contract mismatch is `BLOCKED`; an evidence-backed failure of an authorized operation that cannot progress under the same environment is `FAILED`.
 
-## Scout capability
+## Optional PLAN-task capability: verified mapping
 
-This adapter does not declare `read_only_scout_dispatch`. The Planner therefore uses direct read-only inspection, records `routing: direct` in the contract, and does not build or dispatch scout packets. A future Codex mapping may add the optional capability only through a separately verified adapter revision with an exact metadata update.
+The verified mapping uses the available Codex read-only Agent mechanism: one
+`lightweight_scout` custom Agent per micro or batch task, with the exact task
+envelope and an explicit per-task `model=gpt-5.6-luna` and
+`reasoning_effort=max` override. The host enforces `sandbox_mode=read-only`;
+the task receives only its exact source selectors/query, policy limits, stop
+conditions, and Evidence Packet response contract. It receives no complete
+parent transcript and has no write, external-mutation, decision, contract, or
+spawn authority.
+
+### Live evidence recorded 2026-09-03
+
+The parent Planner ran one real `lightweight_scout` micro
+`repository-read` task with explicit `gpt-5.6-luna/max` selection and
+`fork_context=false`. The task received only the bounded task envelope,
+returned an Evidence Packet accepted by
+`scripts/validate_evidence_packet.py` with exit `0`, and used no expansion.
+Pre/post `HEAD`, staged state, worktree status, and changed-path inventory
+were byte-for-byte identical.
+
+This evidence verifies the Codex micro-task isolation, explicit model/effort
+selection, result relay, no-expansion path, and unchanged-worktree path. It
+does not by itself exercise expansion handling, batch scheduling/concurrency,
+every supported host surface, or WORK dispatch; those remain governed by the
+corresponding operation checks and fallback rules.
+
+The adapter therefore declares `read_only_scout_dispatch`. Direct PLAN handling
+remains the fallback when the host cannot provide this verified mechanism or
+when policy limits are exceeded. A future adapter or broader capability claim
+requires its own retained evidence and versioned metadata revision.
 
 ## Verification basis
 
-This `VERIFIED` mapping preserves main-task planning, explicit per-task implementation-model choice, the model-neutral `lightweight_implementer`, inherited permissions, one subagent writer, documentation-aware result relay, and the user-level Skill plus Agent installation layout. Protocol `0.6` validation checks adapter metadata, all nine operation mappings, the write gate, bundled-rule integrity, feature-documentation integration, and source/install parity. The 2026-08-25 release revalidated current inherited-model resolution and retained the prior isolated Git and lifecycle evidence for unchanged operations.
+This `VERIFIED` mapping preserves main-task planning, explicit per-task implementation-model choice, the model-neutral `lightweight_implementer`, inherited permissions, one subagent writer, documentation-aware result relay, and the user-level Skill plus Agent installation layout. Protocol `0.7` validation checks adapter metadata, all nine operation mappings, the WORK write gate, task-envelope policy, bundled-rule integrity, feature-documentation integration, and source/install parity. The optional PLAN-task mapping is verified for the recorded Codex micro-task path and remains independent of WORK writer authorization.
