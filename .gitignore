@@ -1,4 +1,5 @@
 __pycache__/
 .codex/
+.workbuddy/
 .ruff_cache/
 .vscode/
