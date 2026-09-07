@@ -1,5 +1,18 @@
 # SE, AE, and VR runtime model
 
+## Skyrim research checks
+
+The `skse-plugin-template` binding makes the lightweight workflow's External
+Research Gate mandatory for runtime-sensitive architecture. Before approving
+CommonLib/SKSE APIs, ABI/layout-sensitive code, relocation or vtable hooks,
+rendering/Present, event/input/serialization/Papyrus integration, dependencies,
+or copied third-party designs, record target runtime(s), CommonLib branch and
+version, maintenance status, license/reuse status, and the implementation
+differences found in authoritative upstream and maintained implementation
+evidence. A single-source exception must be explained. Missing or conflicting
+evidence returns the proposal to PLAN; it does not authorize a guessed
+SE/AE/VR design.
+
 ## One CommonLib implementation
 
 Every generated project uses `alandtse/CommonLibSSE-NG` branch `ng` as the

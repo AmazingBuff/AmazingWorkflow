@@ -4,7 +4,7 @@ revision: {{REVISION}}
 status: "DRAFT"
 created_at: "{{ISO_8601_TIMESTAMP}}"
 supersedes: null
-workflow_revision: "0.7.0"
+workflow_revision: "0.7.1"
 protocol_version: "0.7"
 protocol_sha256: null
 host_adapter: null
@@ -41,6 +41,28 @@ Requirements and acceptance criteria below reference surviving stable locators (
 ## Requirements
 
 - R-01: {{REQUIRED_BEHAVIOR}}
+
+## External Research Gate
+
+- Decision: `{{required | recommended | not-required}}`
+- Reason: `{{EXPLICIT_REASON_FOR_THE_DECISION}}`
+- Status: `{{satisfied | pending | unavailable | disabled | insufficient | blocked | not-required}}`
+- Mode: `{{cached-indexed | live | direct-planner | none}}`
+- Decision-critical: `{{true | false}}`
+- Architecture-relevant: `{{true | false}}`
+- Evidence bar: `{{authoritative-plus-maintained | authoritative-only-with-reason | context-only | not-applicable}}`
+- Target applicability: `{{target versions, runtimes, and notes}}`
+- Evidence/source records: `{{STABLE_SOURCE_IDS_URLS_REVISIONS_DATES_LICENSES_APPLICABILITY_LOCATORS_CONFIDENCE_AND_CONFLICTS_OR_NONE}}`
+- Limitation: `{{EXPLICIT_LIMITATION_OR_NONE}}`
+- Uncertainty and risk: `{{EXPLICIT_UNCERTAINTY_AND_RISK}}`
+- Search stopping conditions: `{{EVIDENCE_BAR_CONTRADICTION_MARGINAL_VALUE_AND_BUDGET_RULES}}`
+- Host capability: `{{managed-web-research status, read-only boundary, shell-network=false, and live verification evidence or unavailable reason}}`
+
+Required research that is decision-critical must be `satisfied` before this
+contract can be approved. If managed search is unavailable or insufficient,
+record the limitation and return `BLOCKED`; recommended research may continue
+only with explicit uncertainty and risk. WORK must return to PLAN when missing
+external evidence would change this contract.
 
 ## Non-goals
 

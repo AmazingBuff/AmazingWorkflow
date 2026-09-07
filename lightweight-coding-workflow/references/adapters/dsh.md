@@ -28,6 +28,11 @@ This reference records a candidate DeepSeek Harness (DSH) mapping for the [Host 
 
 Promotion requires every item in the [verification checklist](#verification-checklist), retained evidence, independent review, and a deliberate versioned metadata change. Until then, every attempted write dispatch fails before product changes with `CAPABILITY_UNAVAILABLE`.
 
+This candidate does not declare `managed_web_research`. Its PLAN capability
+status is therefore unavailable until a future adapter revision proves a
+read-only managed-search mapping with a live forward test; the research gate
+uses direct Planner search, an explicit uncertain fallback, or `BLOCKED`.
+
 ## Compatibility
 
 | Item | Candidate mapping |

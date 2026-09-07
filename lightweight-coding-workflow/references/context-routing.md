@@ -14,6 +14,60 @@ authority is `scripts/validate_plan.py`; the JSON schema and
 `scripts/check_contract_parity.py` are checked mirrors. The full field shapes
 are in [orchestration-contracts.md](orchestration-contracts.md).
 
+## External Research Gate
+
+Every non-trivial coding proposal records `external_research` in PLAN with a
+decision of `required`, `recommended`, or `not-required`, an explicit reason,
+and a status. The gate also records mode (`cached-indexed`, `live`,
+`direct-planner`, or `none`), whether the evidence is decision-critical and
+architecture-relevant, the evidence bar, source ids, limitations, uncertainty,
+risk, stop conditions, conflicts, and a managed-web-research capability check.
+
+Use `required` for external API/ABI/framework behavior, runtime or version
+compatibility, low-level hooks or integration patterns, new dependencies,
+license-sensitive reuse, or a locally unsupported design with likely mature
+prior art. Use `not-required` for trivial/mechanical work or when local code,
+tests, and canonical documentation fully determine the change. A required,
+decision-critical gate cannot be approved with `pending`, `unavailable`,
+`disabled`, `insufficient`, or `blocked` status. Recommended research may use
+an explicit uncertain fallback when search is unavailable, but must record the
+limitation and risk.
+
+A `pending` required or recommended gate is dispatchable only when an eligible
+`requirement-research` or `dependency-check` task carries an available,
+verified, read-only managed-search request whose mode matches the gate. That
+dispatch gathers evidence; it is not approval evidence, and a
+decision-critical proposal remains pending until the Planner records
+`satisfied`. A bounded research task may start from its exact query and budget
+without predeclared result URLs, then return newly discovered source records.
+It executes only the authorized query/questions, mode, budget, and stop
+conditions; discovered URLs are in-scope evidence without per-result expansion
+approval, while any additional query, domain, or scope requires an expansion
+request. Discovery grants no download, reuse, copying, write, or mutation
+authority.
+In the same batch, non-web local tasks return `external_sources: []` and a
+`not-required`/`none` research result.
+
+External sources record a stable id, direct URL, source kind, repository or
+project, pinned revision/tag/version or an explicit unknown (an unpinned
+`latest`/`main`/`HEAD` value is not evidence), retrieval date,
+license/reuse status, target-version/runtime applicability, relevant locator,
+confidence, and conflicts. For architecture decisions the normal bar is one
+authoritative upstream source plus one maintained implementation matching the
+target; if only one exists, record the reason. Prefer cached/indexed search for
+established patterns and require live search when freshness, current
+branch/release, issue state, or compatibility may have changed. Stop at a
+satisfied evidence bar, resolved/disclosed contradictions, low marginal value,
+or budget exhaustion.
+
+Only `requirement-research` and `dependency-check` tasks may request the
+explicit managed web-search capability. The request is read-only and the
+validator requires `shell_network=false` and `external_mutations=false`.
+Host capability `available` requires the parent's live read-only forward test;
+documentation alone is not promotion evidence. An unavailable capability uses
+direct Planner search when possible, or records an uncertain/blocked fallback.
+WORK returns to PLAN when missing external evidence would alter the contract.
+
 ## Two-phase and task-capability invariants
 
 - The only public control phases are `PLAN` and `WORK`.
@@ -99,8 +153,10 @@ configuration does not authorize a model substitution.
 
 ### Direct
 
-A direct `routing-decision` record contains the goal and economics only. It
-does not contain task packets, source bytes, or a full orchestration plan.
+A direct `routing-decision` record contains the goal, economics, and the
+`external_research` gate. It does not contain task packets, source bytes, or a
+full orchestration plan; direct external evidence, when used, stays in the
+gate's source records.
 
 ### Micro
 
@@ -157,7 +213,7 @@ verified mechanism is unavailable or policy limits are exceeded.
 
 ## Evidence and compatibility
 
-Evidence Packets use schema `2.0` and
+Evidence Packets use schema `2.1` and
 `scripts/validate_evidence_packet.py`. Every material finding cites a source
 id and precise locator. The response contract specifies finding severity
 `low|medium|high|critical`, finding confidence `low|medium|high`, fact fields
@@ -166,6 +222,6 @@ id and precise locator. The response contract specifies finding severity
 Planner-approved requests may appear in `expansions_used`, and `deny` tasks
 cannot expand.
 
-Workflow `0.7.0` and Protocol `0.7` use schema/config revision `2.0`/`2`.
-Approved `0.6.x` contracts are immutable and continue only with their matching
+Workflow `0.7.1` and Protocol `0.7` use schema/config revision `2.1`/`3`.
+Approved `0.7.0` and `0.6.x` contracts are immutable and continue only with their matching
 historical resources; they are not silently migrated by this reference.

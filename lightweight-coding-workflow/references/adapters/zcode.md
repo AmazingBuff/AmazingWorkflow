@@ -28,6 +28,12 @@ Implementation dispatch eligibility: **no**. While `support_state` is `EXPERIMEN
 
 This reference records a candidate ZCode mapping for the [Host Adapter Contract](../adapter-contract.md) and the [Core protocol](../protocol.md) with the [Context Routing reference](../context-routing.md). The operation designs follow the official ZCode subagent documentation but have not been exercised end to end with retained evidence on the claimed surface. Promotion to `VERIFIED` requires the full adapter-contract verification checklist, retained evidence, and a deliberate versioned metadata change.
 
+This candidate does not declare `managed_web_research`. Documentation of a
+browser or subagent is not capability proof; until a future live read-only
+forward test and adapter revision exist, the PLAN gate records managed search
+as unavailable and uses direct Planner search, an explicit uncertain fallback,
+or `BLOCKED`.
+
 ## Why this adapter exists
 
 ZCode is the most likely interactive coding-agent host for this workflow: its built-in Agent tool offers a general-purpose subagent type and an `Explore` subagent type that is read-only by design. The `Explore` type maps naturally onto the optional `read_only_scout_dispatch` capability, because the host itself enforces the read-only scope rather than relying on prompt discipline.

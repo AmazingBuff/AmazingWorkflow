@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a read-only PLAN Evidence Task Packet deterministically."""
+"""Validate a read-only PLAN Evidence Task Packet and research provenance."""
 
 from __future__ import annotations
 
@@ -20,8 +20,12 @@ from validate_plan import (
     EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
     IMPLEMENTATION_TASK_KIND,
     READ_ONLY_TASK_KINDS,
+    RESEARCH_RESULT_FIELDS,
     SUPPORTED_SCHEMA_VERSION,
     VALID_EXPANSION_MODES,
+    VALID_EXTERNAL_RESEARCH_MODES,
+    VALID_EXTERNAL_RESEARCH_STATUSES,
+    _validate_external_source_record,
     is_non_empty_string,
     load_plan,
     valid_id,
@@ -42,6 +46,8 @@ EVIDENCE_PACKET_REQUIRED_FIELDS = [
     "unknowns",
     "expansion_requests",
     "expansions_used",
+    "external_sources",
+    "research_result",
 ]
 EVIDENCE_PACKET_TOP_LEVEL_OPTIONAL_FIELDS = ["metrics"]
 EVIDENCE_PACKET_FINDING_FIELDS = [
@@ -71,6 +77,30 @@ FORBIDDEN_CONTROL_FIELDS = {
     "can_spawn_agents",
     "user_interaction",
     "phase_owner",
+    "allow_writes",
+    "allow_external_mutations",
+    "read_only",
+    "network_access",
+    "network",
+    "internet_access",
+    "shell_network",
+    "shell_network_access",
+    "download",
+    "download_remote_code",
+    "execute",
+    "execute_remote_code",
+    "remote_code_execution",
+    "authenticate",
+    "authentication",
+    "github_write",
+    "github_mutation",
+    "dependency_changes",
+    "copy_third_party",
+    "external_write",
+    "web_mutation",
+    "allow_shell_network",
+    "write",
+    "mutate_external_systems",
 }
 
 
@@ -102,6 +132,84 @@ def _validate_string_array(value: Any, path: str, errors: list[str]) -> None:
 def _validate_positive_integer(value: Any, path: str, errors: list[str]) -> None:
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         errors.append(f"{path} must be an integer >= 1")
+
+
+def _validate_external_sources(
+    sources: Any,
+    path: str,
+    errors: list[str],
+    source_ids: set[str] | None,
+    *,
+    allow_discovered_external: bool = False,
+) -> set[str]:
+    if not isinstance(sources, list):
+        errors.append(f"{path} must be an array")
+        return set()
+    result: set[str] = set()
+    for index, source in enumerate(sources):
+        source_id = _validate_external_source_record(
+            source,
+            f"{path}[{index}]",
+            errors,
+            identifier_field="source_id",
+        )
+        if source_id is None:
+            continue
+        if source_id in result:
+            errors.append(f"duplicate external source id: {source_id}")
+        result.add(source_id)
+        if (
+            source_ids is not None
+            and source_id not in source_ids
+            and not allow_discovered_external
+        ):
+            errors.append(
+                f"{path}[{index}].source_id references an unknown assigned source id: {source_id}"
+            )
+    return result
+
+
+def _validate_research_result(
+    result: Any,
+    path: str,
+    errors: list[str],
+    external_source_ids: set[str],
+) -> None:
+    if not isinstance(result, dict):
+        errors.append(f"{path} must be an object")
+        return
+    missing = sorted(set(RESEARCH_RESULT_FIELDS) - set(result))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+    status = result.get("status")
+    if status not in VALID_EXTERNAL_RESEARCH_STATUSES:
+        errors.append(
+            f"{path}.status must be one of {sorted(VALID_EXTERNAL_RESEARCH_STATUSES)}"
+        )
+    if result.get("mode") not in VALID_EXTERNAL_RESEARCH_MODES:
+        errors.append(
+            f"{path}.mode must be one of {sorted(VALID_EXTERNAL_RESEARCH_MODES)}"
+        )
+    for field in ("limitations", "conflicts"):
+        _validate_string_array(result.get(field), f"{path}.{field}", errors)
+    for field in ("uncertainty", "conflict_resolution"):
+        if not is_non_empty_string(result.get(field)):
+            errors.append(f"{path}.{field} must be a non-empty string")
+    if status == "satisfied" and not external_source_ids:
+        errors.append(f"{path} with status 'satisfied' must include external_sources")
+    if status == "satisfied" and result.get("mode") == "none":
+        errors.append(f"{path}.mode cannot be none for a satisfied result")
+    if status == "not-required":
+        if result.get("mode") != "none":
+            errors.append(f"{path}.mode must be none when research is not required")
+        if external_source_ids:
+            errors.append(f"{path} must not include external_sources when not required")
+    if status in {"unavailable", "disabled", "insufficient", "blocked"}:
+        limitations = result.get("limitations")
+        if not isinstance(limitations, list) or not limitations:
+            errors.append(f"{path}.limitations must explain an unavailable or insufficient result")
+    if result.get("conflicts") and result.get("conflict_resolution") == "No material conflict identified.":
+        errors.append(f"{path}.conflict_resolution must address the recorded conflicts")
 
 
 def _reject_forbidden_control_fields(value: Any, path: str, errors: list[str]) -> None:
@@ -418,8 +526,52 @@ def validate_evidence_packet(
                 if isinstance(source, dict) and valid_id(source.get("id"))
             }
 
-    _validate_findings(packet.get("findings"), errors, source_ids)
-    _validate_facts(packet.get("facts_for_parent"), errors, source_ids)
+    plan_research = plan.get("external_research") if plan is not None else None
+    allow_discovered_external = (
+        isinstance(plan_research, dict)
+        and plan_research.get("status") == "pending"
+        and isinstance(plan_task, dict)
+        and plan_task.get("task_kind") in {"requirement-research", "dependency-check"}
+        and isinstance(plan_task.get("web_research"), dict)
+        and plan_task["web_research"].get("requested") is True
+    )
+    external_source_ids = _validate_external_sources(
+        packet.get("external_sources"),
+        "external_sources",
+        errors,
+        source_ids,
+        allow_discovered_external=allow_discovered_external,
+    )
+    _validate_research_result(
+        packet.get("research_result"),
+        "research_result",
+        errors,
+        external_source_ids,
+    )
+    if plan is not None:
+        packet_research = packet.get("research_result")
+        if isinstance(plan_research, dict) and isinstance(packet_research, dict):
+            planned_status = plan_research.get("status")
+            packet_status = packet_research.get("status")
+            if planned_status == "satisfied" and packet_status != "satisfied":
+                errors.append(
+                    "research_result.status must remain satisfied when the PLAN research gate is satisfied"
+                )
+            planned_source_ids = set(plan_research.get("source_ids", []))
+            if (
+                not allow_discovered_external
+                and not external_source_ids.issubset(planned_source_ids)
+            ):
+                errors.append(
+                    "external_sources must be limited to source ids authorized by the PLAN research gate"
+                )
+    finding_source_ids = (
+        (source_ids or set()).union(external_source_ids)
+        if allow_discovered_external
+        else source_ids
+    )
+    _validate_findings(packet.get("findings"), errors, finding_source_ids)
+    _validate_facts(packet.get("facts_for_parent"), errors, finding_source_ids)
     _validate_expansions(packet, errors, source_ids, plan_task)
     if packet.get("status") in {"partial", "blocked"}:
         unknowns = packet.get("unknowns")

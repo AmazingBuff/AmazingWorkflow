@@ -1,5 +1,18 @@
 # Build, acquisition, and verification
 
+## Skyrim research checks
+
+The generic conditional research policy is defined by
+`lightweight-coding-workflow`. For a plugin architecture involving CommonLib,
+SKSE, a dependency, or copied third-party design, the SKSE binding requires
+read-only evidence for the target runtime(s), CommonLib branch/version,
+maintenance status, license/reuse status, and implementation differences.
+Prefer pinned upstream source/documentation and a maintained implementation
+that matches SE, AE, or VR. Do not treat a GitHub README, snippet, or popularity
+as authority. If the required evidence is unavailable or incompatible, return
+to PLAN before changing the build or architecture; acquisition commands below
+remain explicit external actions and are never implied by research.
+
 ## Toolchain
 
 Generated projects target Windows x64, Visual Studio 2022, C++23, CMake 3.25

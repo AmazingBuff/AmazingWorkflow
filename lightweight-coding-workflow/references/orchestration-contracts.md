@@ -20,6 +20,55 @@ requirement-research | repository-read | dependency-check | evidence-analysis
 `lightweight_scout` may implement all four PLAN kinds, but each invocation is
 task-scoped and read-only. It never authors a plan or implementation contract.
 
+## 1a. External Research Gate
+
+Every non-trivial coding proposal includes an `external_research` object in
+PLAN. Its decision is `required`, `recommended`, or `not-required`; its reason
+and status are explicit. The object also records mode, decision-critical and
+architecture-relevant flags, evidence bar, source ids, citations, limitations,
+uncertainty, risk, stop conditions, conflicts, conflict resolution, fallback,
+and a host capability check.
+
+Required triggers are external APIs/ABIs/frameworks, runtime or version
+compatibility, low-level hooks or integration patterns, new dependencies,
+license-sensitive reuse, and locally unsupported designs with likely mature
+prior art. Trivial/mechanical work and changes fully determined by local code,
+tests, and canonical documentation may be not-required. Required
+decision-critical research cannot be approved while unavailable or
+insufficient; recommended research can continue only with explicit uncertainty
+and risk.
+
+External source records use stable ids and direct URLs and include source kind,
+repository/project, revision, retrieval date, license/reuse status,
+target-version/runtime applicability, relevant locator, confidence, and
+conflicts. The normal architecture bar is one authoritative upstream source
+plus one maintained matching implementation, or a documented single-source
+reason. Cached/indexed search is the default; live search is used when
+freshness, release/branch, issue state, or compatibility may change. Stop when
+the evidence bar is met, contradictions are resolved/disclosed, marginal value
+falls below cost, or the budget is exhausted.
+
+Only `requirement-research` and `dependency-check` tasks may request
+`managed-web-research`. The capability is read-only, has no shell-network or
+external-mutation authority, and is not promoted from documentation alone.
+Unavailable capability records a direct-Planner, uncertain, or blocked
+fallback. WORK returns to PLAN if missing external evidence would alter the
+contract.
+
+The gate may be `pending` while an eligible task is dispatched with an
+available, verified, read-only request using the gate's mode. The dispatch is
+evidence gathering, not approval evidence. Research tasks may begin with an
+exact query and budget and return newly discovered external source records;
+the source id, URL, revision, date, license/reuse status, applicability,
+locator, confidence, and conflicts travel with the Evidence Packet. A local
+task in a mixed batch returns `external_sources: []` and
+`research_result.status: "not-required"` with mode `"none"`.
+For a web request, only the authorized query/questions, mode, budget, and stop
+conditions are in scope. URLs discovered by that query need no per-result
+expansion approval; an additional query, domain, or scope requires an
+expansion request, and discovery grants no download, reuse, write, or mutation
+authority.
+
 ## 2. Context-economics record
 
 Every delegated routing record contains:
@@ -50,7 +99,7 @@ Direct handling is represented without task or source packet data:
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "envelope_type": "routing-decision",
   "plan_id": "payment-timeout-plan",
   "goal": "Decide whether repository reading is needed.",
@@ -71,6 +120,41 @@ Direct handling is represented without task or source packet data:
       "evidence_already_present": true,
       "continuous_planner_judgment": false
     }
+  },
+  "external_research": {
+    "decision": "not-required",
+    "reason": "The answer is already in Planner context and no external design evidence is needed.",
+    "status": "not-required",
+    "mode": "none",
+    "decision_critical": false,
+    "architecture_relevant": false,
+    "evidence_bar": "not-applicable",
+    "target_applicability": {
+      "target_versions": ["not-applicable"],
+      "target_runtimes": ["not-applicable"],
+      "notes": "No external target applies."
+    },
+    "source_ids": [],
+    "sources": [],
+    "evidence": [],
+    "limitations": [],
+    "uncertainty": "No external research was needed.",
+    "risk": "A later architecture decision must reevaluate the gate.",
+    "stop_conditions": ["The Planner context is sufficient."],
+    "conflicts": [],
+    "conflict_resolution": "No material conflict identified.",
+    "fallback": "not-applicable",
+    "host_capability": {
+      "capability": "managed-web-research",
+      "status": "not-checked",
+      "mode": "none",
+      "read_only": true,
+      "shell_network": false,
+      "external_mutations": false,
+      "verified": false,
+      "verification_method": "not-applicable",
+      "verification": "No managed web search was requested."
+    }
   }
 }
 ```
@@ -82,7 +166,7 @@ not require a full orchestration plan or batch merge:
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "envelope_type": "micro-task",
   "plan_id": "payment-timeout-plan",
   "task_id": "read-timeout-setting",
@@ -97,7 +181,8 @@ not require a full orchestration plan or batch merge:
       "uri": "src/api/payment_controller.py",
       "selector": {"type": "symbol", "name": "PaymentController.submit"},
       "estimated_tokens": 300,
-      "purpose": "Endpoint timeout configuration"
+      "purpose": "Endpoint timeout configuration",
+      "source_kind": "local-code"
     }
   ],
   "deliverable": "One fact with a precise source locator.",
@@ -131,7 +216,16 @@ not require a full orchestration plan or batch merge:
     "allow_external_mutations": false,
     "user_visible_dispatch_notice": true,
     "per_task_approval_required": false,
-    "over_policy": "user-approval-or-direct-fallback"
+    "over_policy": "user-approval-or-direct-fallback",
+    "managed_web_research": {
+      "capability": "managed-web-research",
+      "allowed_task_kinds": ["dependency-check", "requirement-research"],
+      "allowed_modes": ["cached-indexed", "live"],
+      "read_only": true,
+      "shell_network": false,
+      "external_mutations": false,
+      "unavailable_fallback": "direct-planner-or-blocked"
+    }
   },
   "plan_task_authorization": {
     "authorized": true,
@@ -145,8 +239,43 @@ not require a full orchestration plan or batch merge:
     "reasoning_effort": "max",
     "explicit": true
   },
+  "external_research": {
+    "decision": "not-required",
+    "reason": "The local source determines this bounded lookup.",
+    "status": "not-required",
+    "mode": "none",
+    "decision_critical": false,
+    "architecture_relevant": false,
+    "evidence_bar": "not-applicable",
+    "target_applicability": {
+      "target_versions": ["not-applicable"],
+      "target_runtimes": ["not-applicable"],
+      "notes": "No external target applies to this local lookup."
+    },
+    "source_ids": [],
+    "sources": [],
+    "evidence": [],
+    "limitations": [],
+    "uncertainty": "No external research was needed.",
+    "risk": "A later architecture choice must reevaluate the gate.",
+    "stop_conditions": ["The local fact is located."],
+    "conflicts": [],
+    "conflict_resolution": "No material conflict identified.",
+    "fallback": "not-applicable",
+    "host_capability": {
+      "capability": "managed-web-research",
+      "status": "not-checked",
+      "mode": "none",
+      "read_only": true,
+      "shell_network": false,
+      "external_mutations": false,
+      "verified": false,
+      "verification_method": "not-applicable",
+      "verification": "No managed web search was requested."
+    }
+  },
   "response_contract": {
-    "schema_version": "2.0",
+    "schema_version": "2.1",
     "packet_type": "subagent-result",
     "schema_ref": "assets/context-routing/evidence-packet.schema.json",
     "validation_authority": "scripts/validate_evidence_packet.py",
@@ -155,7 +284,9 @@ not require a full orchestration plan or batch merge:
     "finding_confidence_values": ["low", "medium", "high"],
     "evidence_fields": ["source_id", "locator", "note"],
     "fact_fields": ["id", "statement", "provenance", "confidence"],
-    "fact_confidence_values": ["confirmed", "inferred", "unverified"]
+    "fact_confidence_values": ["confirmed", "inferred", "unverified"],
+    "external_source_fields": ["source_id", "source_kind", "uri", "repository", "project", "revision", "retrieved_at", "license", "reuse_status", "target_applicability", "locator", "confidence", "conflicts"],
+    "research_result_fields": ["status", "mode", "limitations", "uncertainty", "conflicts", "conflict_resolution"]
   },
   "execution_rules": {
     "read_only": true,
@@ -180,7 +311,7 @@ A batch keeps the full plan shape and uses `envelope_type: "batch-plan"`:
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "envelope_type": "batch-plan",
   "plan_id": "payment-timeout-investigation",
   "goal": "Gather evidence for a contract.",
@@ -188,7 +319,7 @@ A batch keeps the full plan shape and uses `envelope_type: "batch-plan"`:
   "configuration": {
     "id": "context-routing-defaults",
     "source": "assets/context-routing/default-config.yaml",
-    "revision": 2,
+    "revision": 3,
     "digest": "sha256:<64-hex-digits>"
   },
   "routing": {
@@ -198,6 +329,40 @@ A batch keeps the full plan shape and uses `envelope_type: "batch-plan"`:
     "multiple_information_boundaries": true,
     "basis": "The task crosses independent information boundaries.",
     "economics": {}
+  },
+  "external_research": {
+    "decision": "not-required",
+    "reason": "Populate this gate before approving any non-trivial proposal.",
+    "status": "not-required",
+    "mode": "none",
+    "decision_critical": false,
+    "architecture_relevant": false,
+    "evidence_bar": "not-applicable",
+    "target_applicability": {
+      "target_versions": ["not-applicable"],
+      "target_runtimes": ["not-applicable"],
+      "notes": "No external target applies in this skeleton."
+    },
+    "source_ids": [],
+    "evidence": [],
+    "limitations": [],
+    "uncertainty": "No external evidence has been requested in this skeleton.",
+    "risk": "A real architecture proposal must reevaluate this decision.",
+    "stop_conditions": ["The Planner has classified the research need."],
+    "conflicts": [],
+    "conflict_resolution": "No material conflict identified.",
+    "fallback": "not-applicable",
+    "host_capability": {
+      "capability": "managed-web-research",
+      "status": "not-checked",
+      "mode": "none",
+      "read_only": true,
+      "shell_network": false,
+      "external_mutations": false,
+      "verified": false,
+      "verification_method": "not-applicable",
+      "verification": "No managed web search was requested."
+    }
   },
   "plan_task_authorization": {
     "authorized": true,
@@ -217,7 +382,16 @@ A batch keeps the full plan shape and uses `envelope_type: "batch-plan"`:
     "allow_external_mutations": false,
     "user_visible_dispatch_notice": true,
     "per_task_approval_required": false,
-    "over_policy": "user-approval-or-direct-fallback"
+    "over_policy": "user-approval-or-direct-fallback",
+    "managed_web_research": {
+      "capability": "managed-web-research",
+      "allowed_task_kinds": ["dependency-check", "requirement-research"],
+      "allowed_modes": ["cached-indexed", "live"],
+      "read_only": true,
+      "shell_network": false,
+      "external_mutations": false,
+      "unavailable_fallback": "direct-planner-or-blocked"
+    }
   },
   "budget": {
     "max_subagents": 3,
@@ -252,7 +426,7 @@ economics, and the following result contract:
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "packet_type": "subagent-result",
   "schema_ref": "assets/context-routing/evidence-packet.schema.json",
   "validation_authority": "scripts/validate_evidence_packet.py",
@@ -261,7 +435,9 @@ economics, and the following result contract:
   "finding_confidence_values": ["low", "medium", "high"],
   "evidence_fields": ["source_id", "locator", "note"],
   "fact_fields": ["id", "statement", "provenance", "confidence"],
-  "fact_confidence_values": ["confirmed", "inferred", "unverified"]
+  "fact_confidence_values": ["confirmed", "inferred", "unverified"],
+  "external_source_fields": ["source_id", "source_kind", "uri", "repository", "project", "revision", "retrieved_at", "license", "reuse_status", "target_applicability", "locator", "confidence", "conflicts"],
+  "research_result_fields": ["status", "mode", "limitations", "uncertainty", "conflicts", "conflict_resolution"]
 }
 ```
 
@@ -272,7 +448,7 @@ generator marker and packet digests authenticate every existing output file.
 
 ## 7. Evidence Packet
 
-An Evidence Packet uses schema `2.0`, `packet_type: "subagent-result"`, the
+An Evidence Packet uses schema `2.1`, `packet_type: "subagent-result"`, the
 matching `plan_id`, `task_id`, and supported `task_kind`, plus findings with
 precise source locators, reusable facts, assumptions, unknowns, and expansion
 records. `partial` and `blocked` results must list missing information.
@@ -287,7 +463,7 @@ permissions, no writes or external mutations, one user-visible dispatch
 notice, and no per-task approval within policy. Exceeding it requires user
 approval or direct fallback.
 
-Workflow `0.7.0` uses schema/config revision `2.0`/`2`. Approved `0.6.x`
+Workflow `0.7.1` uses schema/config revision `2.1`/`3`. Approved `0.7.0` and `0.6.x`
 contracts and their plan/packet resources remain immutable and are continued
 only with matching historical resources. Additive fields are allowed within a
 version; breaking field or semantic changes require the coordinated schema,

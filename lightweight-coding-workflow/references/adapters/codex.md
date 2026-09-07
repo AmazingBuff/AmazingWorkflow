@@ -30,6 +30,14 @@ Implementation dispatch eligibility: **yes**, only after contract/model approval
 
 This adapter is the sole `VERIFIED` protocol `0.7` mapping. It implements the [Host Adapter Contract](../adapter-contract.md) for the [Core protocol](../protocol.md), carries feature-documentation evidence, and preserves the model-neutral custom Agents. The read-only PLAN-task capability is separately verified and is not implied by WORK dispatch.
 
+Managed web research is not declared as a verified adapter capability in this
+revision. The PLAN envelope carries an explicit `managed-web-research` check
+that distinguishes the managed service from shell networking and records
+`unavailable` until the parent Planner completes a bounded live read-only
+forward test. Documentation or a browser surface alone cannot promote the
+capability; requirement-research and dependency-check use direct Planner search,
+an explicit uncertain fallback, or `BLOCKED` as the gate requires.
+
 ## Compatibility
 
 | Item | Mapping |
@@ -48,7 +56,14 @@ This adapter is the sole `VERIFIED` protocol `0.7` mapping. It implements the [H
 
 Protocol `0.7` requires exact adapter metadata. Older approved contracts remain immutable and continue only with matching historical resources or a newly approved revision.
 
-Workflow revision compatibility: contracts approved under `0.6.x` remain immutable and use matching historical Skill, Core, adapter, schema, and configuration resources. New `0.7.0` contracts carry verified `workflow_revision`, `protocol_sha256`, and `adapter_sha256` evidence; Codex adapter version is `0.7`. Text-resource evidence uses the canonical UTF-8/LF digest representation documented by the Core; binary and generated packet artifacts retain raw-byte hashing.
+Workflow revision compatibility: contracts approved under `0.7.0` or `0.6.x`
+remain immutable and use matching historical Skill, Core, adapter, schema, and
+configuration resources. New `0.7.1` contracts carry verified
+`workflow_revision`, `protocol_sha256`, and `adapter_sha256` evidence; Codex
+adapter version remains `0.7` because no new web capability is promoted here.
+Text-resource evidence uses the canonical UTF-8/LF digest representation
+documented by the Core; binary and generated packet artifacts retain raw-byte
+hashing.
 
 ## Operation map
 
@@ -64,6 +79,12 @@ Workflow revision compatibility: contracts approved under `0.6.x` remain immutab
 | Result relay | `relay_result` | Receive the worker's final Markdown and validate its status plus every required Core section, including `DOCUMENTATION`. | Continue the same worker for an in-scope malformed result; otherwise `FAILED`. |
 | Version-control management | `manage_version_control` | Use read-only Git commands for baselines; use exact-path staging and commit only under exact contract authority; push only under separate remote/refspec authority. | `BLOCKED` for authority, overlap, or baseline conflicts; `FAILED` for an unrecoverable authorized Git operation. |
 | PLAN task dispatch (optional) | `read_only_scout_dispatch` | Verified Codex read-only `lightweight_scout` invocation with an explicit per-task `gpt-5.6-luna/max` override, exact micro/batch task envelope, and no parent transcript. | `CAPABILITY_UNAVAILABLE` when the host cannot provide the verified read-only mechanism or model; direct PLAN fallback when policy limits are exceeded. |
+
+Managed web-research capability status is read from the PLAN envelope, not
+inferred from this operation map. A future `managed_web_research` mapping must
+be added in a new adapter metadata revision only after the parent's live
+read-only forward test records task isolation, managed-search provenance, and
+unchanged source state.
 
 ## `identify_host`
 

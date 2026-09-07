@@ -4,7 +4,8 @@
 The validator uses only the Python standard library. It checks the effective
 configuration digest, explicit PLAN-task authorization, structure, source
 references, dependency cycles, token budgets, task capability, expansion
-policy, and accidental source overlap. Token estimates are planning
+policy, conditional external-research decisions, source provenance, managed
+search boundaries, and accidental source overlap. Token estimates are planning
 approximations, not billing truth; the estimator weights CJK characters near
 one token per character and other text near four characters per token.
 
@@ -28,12 +29,121 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-SUPPORTED_SCHEMA_VERSION = "2.0"
+SUPPORTED_SCHEMA_VERSION = "2.1"
+SUPPORTED_CONFIG_REVISION = 3
 DEFAULT_CONFIG_RELATIVE_PATH = Path("assets/context-routing/default-config.yaml")
 VALID_MODES = {"lean", "balanced", "independent-review", "high-assurance"}
 VALID_CONFIDENCE = {"confirmed", "inferred", "unverified"}
 VALID_EXPANSION_MODES = {"deny", "request"}
 VALID_ROUTING_DECISIONS = {"direct", "micro", "batch"}
+VALID_EXTERNAL_RESEARCH_DECISIONS = {"required", "recommended", "not-required"}
+VALID_EXTERNAL_RESEARCH_STATUSES = {
+    "satisfied",
+    "not-required",
+    "pending",
+    "unavailable",
+    "disabled",
+    "insufficient",
+    "blocked",
+}
+VALID_EXTERNAL_RESEARCH_MODES = {
+    "cached-indexed",
+    "live",
+    "direct-planner",
+    "none",
+}
+VALID_EXTERNAL_RESEARCH_FALLBACKS = {
+    "task-evidence",
+    "direct-planner",
+    "blocked",
+    "uncertain",
+    "not-applicable",
+}
+VALID_HOST_CAPABILITY_STATUSES = {
+    "available",
+    "unavailable",
+    "disabled",
+    "insufficient",
+    "not-checked",
+}
+VALID_SOURCE_KINDS = {
+    "local-code",
+    "local-test",
+    "local-documentation",
+    "local-log",
+    "local-other",
+    "authoritative-upstream",
+    "maintained-implementation",
+    "upstream-issue",
+    "community-secondary",
+}
+EXTERNAL_SOURCE_KINDS = {
+    "authoritative-upstream",
+    "maintained-implementation",
+    "upstream-issue",
+    "community-secondary",
+}
+VALID_SOURCE_REUSE_STATUSES = {
+    "not-reused",
+    "reviewed-permitted",
+    "review-required",
+    "prohibited",
+    "unknown",
+}
+VALID_SOURCE_CONFIDENCE = {"low", "medium", "high"}
+VALID_EVIDENCE_BARS = {
+    "authoritative-plus-maintained",
+    "authoritative-only-with-reason",
+    "context-only",
+    "not-applicable",
+}
+VALID_WEB_RESEARCH_TASK_KINDS = {"requirement-research", "dependency-check"}
+VALID_WEB_RESEARCH_REQUEST_AVAILABILITY = {
+    "available",
+    "unavailable",
+    "disabled",
+    "insufficient",
+}
+EXTERNAL_URL_PATTERN = re.compile(r"^https?://[^\s]+$")
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+STALE_REVISION_VALUES = {"latest", "main", "master", "head", "trunk"}
+FORBIDDEN_PLAN_AUTHORITY_FIELDS = {
+    "write_authority",
+    "can_write",
+    "external_mutations",
+    "read_only",
+    "allow_writes",
+    "allow_external_mutations",
+    "can_mutate_external_systems",
+    "scope_decision",
+    "contract_authority",
+    "can_author_contract",
+    "spawn_agents",
+    "can_spawn_agents",
+    "user_interaction",
+    "phase_owner",
+    "network_access",
+    "network",
+    "internet_access",
+    "shell_network",
+    "shell_network_access",
+    "allow_shell_network",
+    "download",
+    "download_remote_code",
+    "execute",
+    "execute_remote_code",
+    "remote_code_execution",
+    "authenticate",
+    "authentication",
+    "github_write",
+    "github_mutation",
+    "dependency_changes",
+    "copy_third_party",
+    "external_write",
+    "web_mutation",
+    "write",
+    "mutate_external_systems",
+}
 READ_ONLY_TASK_KINDS = {
     "requirement-research",
     "repository-read",
@@ -69,6 +179,7 @@ REQUIRED_PLAN_TASK_POLICY_FIELDS = {
     "user_visible_dispatch_notice",
     "per_task_approval_required",
     "over_policy",
+    "managed_web_research",
 }
 REQUIRED_PLAN_TASK_AUTHORIZATION_FIELDS = {
     "authorized",
@@ -77,6 +188,86 @@ REQUIRED_PLAN_TASK_AUTHORIZATION_FIELDS = {
     "task_count",
     "token_ceiling",
 }
+REQUIRED_MANAGED_WEB_RESEARCH_POLICY_FIELDS = {
+    "capability",
+    "allowed_task_kinds",
+    "allowed_modes",
+    "read_only",
+    "shell_network",
+    "external_mutations",
+    "unavailable_fallback",
+}
+REQUIRED_EXTERNAL_RESEARCH_FIELDS = {
+    "decision",
+    "reason",
+    "status",
+    "mode",
+    "decision_critical",
+    "architecture_relevant",
+    "evidence_bar",
+    "target_applicability",
+    "source_ids",
+    "evidence",
+    "limitations",
+    "uncertainty",
+    "risk",
+    "stop_conditions",
+    "conflicts",
+    "conflict_resolution",
+    "fallback",
+    "host_capability",
+}
+REQUIRED_EXTERNAL_RESEARCH_POLICY_FIELDS = {
+    "allowed_decisions",
+    "required_triggers",
+    "skip_conditions",
+    "source_priority",
+    "architecture_evidence_bar",
+    "search_modes",
+    "live_search_conditions",
+    "stopping_rules",
+    "security_boundary",
+}
+REQUIRED_HOST_CAPABILITY_FIELDS = {
+    "capability",
+    "status",
+    "mode",
+    "read_only",
+    "shell_network",
+    "external_mutations",
+    "verified",
+    "verification_method",
+    "verification",
+}
+REQUIRED_RESEARCH_EVIDENCE_FIELDS = [
+    "source_id",
+    "locator",
+    "note",
+    "confidence",
+]
+REQUIRED_EXTERNAL_SOURCE_FIELDS = [
+    "source_id",
+    "source_kind",
+    "uri",
+    "repository",
+    "project",
+    "revision",
+    "retrieved_at",
+    "license",
+    "reuse_status",
+    "target_applicability",
+    "locator",
+    "confidence",
+    "conflicts",
+]
+RESEARCH_RESULT_FIELDS = [
+    "status",
+    "mode",
+    "limitations",
+    "uncertainty",
+    "conflicts",
+    "conflict_resolution",
+]
 REQUIRED_MODEL_OVERRIDE_FIELDS = {"model", "reasoning_effort", "explicit"}
 EVIDENCE_PACKET_EVIDENCE_FIELDS = ["source_id", "locator", "note"]
 EVIDENCE_PACKET_FACT_FIELDS = ["id", "statement", "provenance", "confidence"]
@@ -128,6 +319,7 @@ REQUIRED_TOP_LEVEL_FIELDS = {
     "mode",
     "configuration",
     "routing",
+    "external_research",
     "plan_task_authorization",
     "plan_task_policy",
     "budget",
@@ -227,6 +419,7 @@ def load_effective_config(path: Path | None = None) -> dict[str, Any]:
         "config_id",
         "config_revision",
         "routing_policy",
+        "external_research_policy",
         "mode_profiles",
         "scout_policy",
         "plan_task_policy",
@@ -240,7 +433,61 @@ def load_effective_config(path: Path | None = None) -> dict[str, Any]:
         raise ValueError(
             f"configuration schema_version must be {SUPPORTED_SCHEMA_VERSION!r}: {config_path}"
         )
+    if config.get("config_revision") != SUPPORTED_CONFIG_REVISION:
+        raise ValueError(
+            "configuration config_revision must be "
+            f"{SUPPORTED_CONFIG_REVISION}: {config_path}"
+        )
+    policy_errors = validate_external_research_policy(
+        config.get("external_research_policy")
+    )
+    if policy_errors:
+        raise ValueError("invalid external research configuration: " + "; ".join(policy_errors))
     return config
+
+
+def validate_external_research_policy(
+    policy: Any, path: str = "external_research_policy"
+) -> list[str]:
+    """Validate the configuration policy mirrored into each PLAN proposal."""
+    errors: list[str] = []
+    if not isinstance(policy, dict):
+        return [f"{path} must be an object"]
+    missing = sorted(REQUIRED_EXTERNAL_RESEARCH_POLICY_FIELDS - set(policy))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+    if policy.get("allowed_decisions") != sorted(VALID_EXTERNAL_RESEARCH_DECISIONS):
+        errors.append(
+            f"{path}.allowed_decisions must equal {sorted(VALID_EXTERNAL_RESEARCH_DECISIONS)!r}"
+        )
+    if policy.get("source_priority") != [
+        "authoritative-upstream",
+        "maintained-implementation",
+        "upstream-issue",
+        "community-secondary",
+    ]:
+        errors.append(
+            f"{path}.source_priority must list authoritative, maintained, issue, then community evidence"
+        )
+    for field in (
+        "required_triggers",
+        "skip_conditions",
+        "source_priority",
+        "search_modes",
+        "live_search_conditions",
+        "stopping_rules",
+        "security_boundary",
+    ):
+        validate_string_list(policy.get(field), f"{path}.{field}", errors, allow_empty=False)
+    if policy.get("architecture_evidence_bar") != "authoritative-plus-maintained-or-explained-single-source":
+        errors.append(
+            f"{path}.architecture_evidence_bar must state the authoritative-plus-maintained requirement"
+        )
+    if policy.get("search_modes") != ["cached-indexed", "live", "direct-planner", "none"]:
+        errors.append(
+            f"{path}.search_modes must equal ['cached-indexed', 'live', 'direct-planner', 'none']"
+        )
+    return errors
 
 
 def sha256_file(path: Path) -> str:
@@ -450,6 +697,631 @@ def _validate_expansion_policy(
     return expansion
 
 
+def _reject_forbidden_plan_authority(
+    value: Any, path: str, errors: list[str]
+) -> None:
+    """Reject network/mutation authority hidden in an otherwise open envelope."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if key in FORBIDDEN_PLAN_AUTHORITY_FIELDS:
+                safe = (
+                    (key == "write_authority" and child == "none")
+                    or (
+                        key == "external_mutations"
+                        and (child is False or child == "forbidden")
+                    )
+                    or (
+                        key
+                        in {
+                            "allow_writes",
+                            "allow_external_mutations",
+                            "shell_network",
+                            "network_access",
+                            "shell_network_access",
+                            "allow_shell_network",
+                            "user_interaction",
+                        }
+                        and child is False
+                    )
+                    or (key == "read_only" and child is True)
+                )
+                if not safe:
+                    errors.append(
+                        f"{child_path} carries forbidden write, network, or external authority"
+                    )
+            _reject_forbidden_plan_authority(child, child_path, errors)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_forbidden_plan_authority(child, f"{path}[{index}]", errors)
+
+
+def _validate_target_applicability(
+    applicability: Any, path: str, errors: list[str]
+) -> dict[str, Any]:
+    if not isinstance(applicability, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    for field in ("target_versions", "target_runtimes"):
+        validate_string_list(
+            applicability.get(field),
+            f"{path}.{field}",
+            errors,
+            allow_empty=False,
+        )
+    if not is_non_empty_string(applicability.get("notes")):
+        errors.append(f"{path}.notes must be a non-empty string")
+    return applicability
+
+
+def _validate_external_source_record(
+    source: Any,
+    path: str,
+    errors: list[str],
+    *,
+    identifier_field: str,
+) -> str | None:
+    """Validate the provenance fields required for an external source."""
+    if not isinstance(source, dict):
+        errors.append(f"{path} must be an object")
+        return None
+
+    source_id = source.get(identifier_field)
+    if not valid_id(source_id):
+        errors.append(f"{path}.{identifier_field} has an invalid identifier")
+        source_id = None
+    source_kind = source.get("source_kind")
+    if source_kind not in EXTERNAL_SOURCE_KINDS:
+        errors.append(
+            f"{path}.source_kind must be one of {sorted(EXTERNAL_SOURCE_KINDS)}"
+        )
+
+    uri = source.get("uri")
+    if not is_non_empty_string(uri) or not EXTERNAL_URL_PATTERN.fullmatch(uri.strip()):
+        errors.append(f"{path}.uri must be a direct http(s) URL for an external source")
+
+    if not is_non_empty_string(source.get("repository")) and not is_non_empty_string(
+        source.get("project")
+    ):
+        errors.append(f"{path} must identify a repository or project")
+    revision = source.get("revision")
+    if not is_non_empty_string(revision):
+        errors.append(f"{path}.revision must record a commit, tag, version, or explicit unknown")
+    elif revision.strip().lower() in STALE_REVISION_VALUES:
+        errors.append(
+            f"{path}.revision must pin a commit, tag, version, or explicit unknown; {revision!r} is stale"
+        )
+    retrieved_at = source.get("retrieved_at")
+    if not isinstance(retrieved_at, str) or not DATE_PATTERN.fullmatch(retrieved_at):
+        errors.append(f"{path}.retrieved_at must use YYYY-MM-DD format")
+    if not is_non_empty_string(source.get("license")):
+        errors.append(f"{path}.license must record a license or explicit unknown")
+    if source.get("reuse_status") not in VALID_SOURCE_REUSE_STATUSES:
+        errors.append(
+            f"{path}.reuse_status must be one of {sorted(VALID_SOURCE_REUSE_STATUSES)}"
+        )
+
+    _validate_target_applicability(
+        source.get("target_applicability"),
+        f"{path}.target_applicability",
+        errors,
+    )
+
+    if not is_non_empty_string(source.get("locator")):
+        errors.append(f"{path}.locator must be a non-empty source locator")
+    if source.get("confidence") not in VALID_SOURCE_CONFIDENCE:
+        errors.append(
+            f"{path}.confidence must be one of {sorted(VALID_SOURCE_CONFIDENCE)}"
+        )
+    validate_string_list(source.get("conflicts"), f"{path}.conflicts", errors)
+    return source_id
+
+
+def _validate_source_metadata(source: Any, path: str, errors: list[str]) -> None:
+    if not isinstance(source, dict):
+        return
+    source_kind = source.get("source_kind")
+    if source_kind not in VALID_SOURCE_KINDS:
+        errors.append(f"{path}.source_kind must be one of {sorted(VALID_SOURCE_KINDS)}")
+        return
+    if source_kind in EXTERNAL_SOURCE_KINDS:
+        _validate_external_source_record(
+            source, path, errors, identifier_field="id"
+        )
+
+
+def _validate_host_capability(
+    capability: Any, path: str, errors: list[str]
+) -> dict[str, Any]:
+    if not isinstance(capability, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    missing = sorted(REQUIRED_HOST_CAPABILITY_FIELDS - set(capability))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+    if capability.get("capability") != "managed-web-research":
+        errors.append(f"{path}.capability must be 'managed-web-research'")
+    if capability.get("status") not in VALID_HOST_CAPABILITY_STATUSES:
+        errors.append(
+            f"{path}.status must be one of {sorted(VALID_HOST_CAPABILITY_STATUSES)}"
+        )
+    if capability.get("mode") not in VALID_EXTERNAL_RESEARCH_MODES:
+        errors.append(
+            f"{path}.mode must be one of {sorted(VALID_EXTERNAL_RESEARCH_MODES)}"
+        )
+    for field, expected in (
+        ("read_only", True),
+        ("shell_network", False),
+        ("external_mutations", False),
+    ):
+        _validate_boolean(capability.get(field), f"{path}.{field}", errors)
+        if capability.get(field) is not expected:
+            errors.append(f"{path}.{field} must be exactly {expected!r}")
+    if not isinstance(capability.get("verified"), bool):
+        errors.append(f"{path}.verified must be a boolean")
+    if not is_non_empty_string(capability.get("verification_method")):
+        errors.append(f"{path}.verification_method must be a non-empty string")
+    if not is_non_empty_string(capability.get("verification")):
+        errors.append(f"{path}.verification must be a non-empty string")
+
+    status = capability.get("status")
+    if status == "available":
+        if capability.get("verified") is not True:
+            errors.append(
+                f"{path}.verified must be true before managed web research is available"
+            )
+        if capability.get("verification_method") != "live-read-only-forward-test":
+            errors.append(
+                f"{path}.verification_method must be 'live-read-only-forward-test' for available capability"
+            )
+        verified_on = capability.get("verified_on")
+        if not isinstance(verified_on, str) or not DATE_PATTERN.fullmatch(verified_on):
+            errors.append(f"{path}.verified_on must use YYYY-MM-DD format for available capability")
+    elif capability.get("verified") is True:
+        errors.append(
+            f"{path}.verified cannot be true while capability status is {status!r}"
+        )
+    return capability
+
+
+def _validate_web_research_request(
+    request: Any,
+    path: str,
+    errors: list[str],
+    *,
+    task_kind: Any,
+) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    required = {
+        "requested",
+        "mode",
+        "capability",
+        "availability",
+        "fallback",
+        "reason",
+        "read_only",
+        "shell_network",
+        "external_mutations",
+    }
+    missing = sorted(required - set(request))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+    if not isinstance(request.get("requested"), bool):
+        errors.append(f"{path}.requested must be a boolean")
+    if request.get("capability") != "managed-web-research":
+        errors.append(f"{path}.capability must be 'managed-web-research'")
+    if request.get("mode") not in {"cached-indexed", "live", "none"}:
+        errors.append(f"{path}.mode must be cached-indexed, live, or none")
+    if request.get("availability") not in VALID_WEB_RESEARCH_REQUEST_AVAILABILITY:
+        errors.append(
+            f"{path}.availability must be one of {sorted(VALID_WEB_RESEARCH_REQUEST_AVAILABILITY)}"
+        )
+    if request.get("fallback") not in VALID_EXTERNAL_RESEARCH_FALLBACKS:
+        errors.append(
+            f"{path}.fallback must be one of {sorted(VALID_EXTERNAL_RESEARCH_FALLBACKS)}"
+        )
+    if not is_non_empty_string(request.get("reason")):
+        errors.append(f"{path}.reason must be a non-empty string")
+    for field, expected in (
+        ("read_only", True),
+        ("shell_network", False),
+        ("external_mutations", False),
+    ):
+        _validate_boolean(request.get(field), f"{path}.{field}", errors)
+        if request.get(field) is not expected:
+            errors.append(f"{path}.{field} must be exactly {expected!r}")
+
+    if request.get("requested") is True:
+        if task_kind not in VALID_WEB_RESEARCH_TASK_KINDS:
+            errors.append(
+                f"{path} is allowed only for requirement-research or dependency-check tasks"
+            )
+        if request.get("mode") == "none":
+            errors.append(f"{path}.mode cannot be none when requested is true")
+        if request.get("availability") != "available" and request.get("fallback") == "none":
+            errors.append(
+                f"{path}.fallback must disclose uncertainty or blocking when managed search is unavailable"
+            )
+    elif request.get("mode") != "none":
+        errors.append(f"{path}.mode must be none when requested is false")
+    return request
+
+
+def _managed_request_matches_gate(
+    research: dict[str, Any], request: Any, task_kind: Any
+) -> bool:
+    """Return whether a task request can satisfy a pending or satisfied gate."""
+    if isinstance(request, list):
+        return any(
+            _managed_request_matches_gate(research, item, kind)
+            for item, kind in request
+            if isinstance(item, dict)
+        )
+    capability = research.get("host_capability", {})
+    return (
+        task_kind in VALID_WEB_RESEARCH_TASK_KINDS
+        and isinstance(request, dict)
+        and request.get("requested") is True
+        and request.get("capability") == "managed-web-research"
+        and request.get("mode") == research.get("mode")
+        and request.get("mode") in {"cached-indexed", "live"}
+        and request.get("availability") == "available"
+        and (
+            research.get("status") != "pending"
+            or request.get("fallback") == "task-evidence"
+        )
+        and (
+            research.get("status") != "satisfied"
+            or request.get("fallback") in {"task-evidence", "direct-planner"}
+        )
+        and request.get("read_only") is True
+        and request.get("shell_network") is False
+        and request.get("external_mutations") is False
+        and capability.get("status") == "available"
+        and capability.get("mode") == research.get("mode")
+        and capability.get("verified") is True
+        and capability.get("read_only") is True
+        and capability.get("shell_network") is False
+        and capability.get("external_mutations") is False
+    )
+
+
+def _validate_request_against_research_gate(
+    research: dict[str, Any],
+    request: Any,
+    task_kind: Any,
+    path: str,
+    errors: list[str],
+) -> None:
+    if not isinstance(request, dict) or request.get("requested") is not True:
+        return
+    if research.get("status") not in {"pending", "satisfied"}:
+        errors.append(
+            f"{path} cannot request managed search when research gate status is {research.get('status')!r}"
+        )
+        return
+    if not _managed_request_matches_gate(research, request, task_kind):
+        errors.append(
+            f"{path} mode, availability, capability, and read-only boundary must match the research gate"
+        )
+
+
+def _validate_research_evidence(
+    evidence: Any,
+    path: str,
+    errors: list[str],
+    source_ids: set[str],
+) -> None:
+    if not isinstance(evidence, list):
+        errors.append(f"{path} must be an array")
+        return
+    for index, item in enumerate(evidence):
+        item_path = f"{path}[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{item_path} must be an object")
+            continue
+        for field in REQUIRED_RESEARCH_EVIDENCE_FIELDS:
+            if field not in item:
+                errors.append(f"{item_path} is missing required field: {field}")
+        source_id = item.get("source_id")
+        if not valid_id(source_id):
+            errors.append(f"{item_path}.source_id has an invalid identifier")
+        elif source_id not in source_ids:
+            errors.append(
+                f"{item_path}.source_id must reference an external research source: {source_id}"
+            )
+        for field in ("locator", "note"):
+            if not is_non_empty_string(item.get(field)):
+                errors.append(f"{item_path}.{field} must be a non-empty string")
+        if item.get("confidence") not in VALID_SOURCE_CONFIDENCE:
+            errors.append(
+                f"{item_path}.confidence must be one of {sorted(VALID_SOURCE_CONFIDENCE)}"
+            )
+        validate_string_list(item.get("conflicts", []), f"{item_path}.conflicts", errors)
+
+
+def validate_external_research(
+    research: Any,
+    path: str,
+    errors: list[str],
+    *,
+    source_map: dict[str, dict[str, Any]] | None = None,
+    direct: bool = False,
+    pending_request: Any = None,
+    pending_task_kind: Any = None,
+) -> dict[str, Any]:
+    """Validate the conditional research gate shared by PLAN envelopes."""
+    if not isinstance(research, dict):
+        errors.append(f"{path} must be an object")
+        return {}
+    missing = sorted(REQUIRED_EXTERNAL_RESEARCH_FIELDS - set(research))
+    if missing:
+        errors.append(f"{path} is missing fields: {', '.join(missing)}")
+
+    decision = research.get("decision")
+    if decision not in VALID_EXTERNAL_RESEARCH_DECISIONS:
+        errors.append(
+            f"{path}.decision must be one of {sorted(VALID_EXTERNAL_RESEARCH_DECISIONS)}"
+        )
+    status = research.get("status")
+    if status not in VALID_EXTERNAL_RESEARCH_STATUSES:
+        errors.append(
+            f"{path}.status must be one of {sorted(VALID_EXTERNAL_RESEARCH_STATUSES)}"
+        )
+    mode = research.get("mode")
+    if mode not in VALID_EXTERNAL_RESEARCH_MODES:
+        errors.append(
+            f"{path}.mode must be one of {sorted(VALID_EXTERNAL_RESEARCH_MODES)}"
+        )
+    if not is_non_empty_string(research.get("reason")):
+        errors.append(f"{path}.reason must be a non-empty string")
+    for field in ("decision_critical", "architecture_relevant"):
+        _validate_boolean(research.get(field), f"{path}.{field}", errors)
+    evidence_bar = research.get("evidence_bar")
+    if evidence_bar not in VALID_EVIDENCE_BARS:
+        errors.append(
+            f"{path}.evidence_bar must be one of {sorted(VALID_EVIDENCE_BARS)}"
+        )
+    target_applicability = _validate_target_applicability(
+        research.get("target_applicability"),
+        f"{path}.target_applicability",
+        errors,
+    )
+    source_ids_list = validate_string_list(
+        research.get("source_ids"), f"{path}.source_ids", errors
+    )
+    if len(set(source_ids_list)) != len(source_ids_list):
+        errors.append(f"{path}.source_ids contains duplicates")
+    limitations = validate_string_list(
+        research.get("limitations"), f"{path}.limitations", errors
+    )
+    conflicts = validate_string_list(
+        research.get("conflicts"), f"{path}.conflicts", errors
+    )
+    validate_string_list(
+        research.get("stop_conditions"), f"{path}.stop_conditions", errors, allow_empty=False
+    )
+    if not is_non_empty_string(research.get("uncertainty")):
+        errors.append(f"{path}.uncertainty must be a non-empty string")
+    if not is_non_empty_string(research.get("risk")):
+        errors.append(f"{path}.risk must be a non-empty string")
+    if not is_non_empty_string(research.get("conflict_resolution")):
+        errors.append(f"{path}.conflict_resolution must be a non-empty string")
+    fallback = research.get("fallback")
+    if fallback not in VALID_EXTERNAL_RESEARCH_FALLBACKS:
+        errors.append(
+            f"{path}.fallback must be one of {sorted(VALID_EXTERNAL_RESEARCH_FALLBACKS)}"
+        )
+    capability = _validate_host_capability(
+        research.get("host_capability"), f"{path}.host_capability", errors
+    )
+
+    external_source_ids = set(source_ids_list)
+    direct_sources = research.get("sources", [])
+    if source_map is not None:
+        if direct_sources:
+            errors.append(f"{path}.sources is only allowed on a direct routing record")
+        for source_id in source_ids_list:
+            source = source_map.get(source_id)
+            if source is None:
+                errors.append(f"{path}.source_ids references unknown source id: {source_id}")
+            elif source.get("source_kind") not in EXTERNAL_SOURCE_KINDS:
+                errors.append(
+                    f"{path}.source_ids must reference external sources, got {source_id}"
+                )
+    elif direct:
+        if not isinstance(direct_sources, list):
+            errors.append(f"{path}.sources must be an array on a direct routing record")
+            direct_sources = []
+        direct_ids: set[str] = set()
+        for index, source in enumerate(direct_sources):
+            source_id = _validate_external_source_record(
+                source,
+                f"{path}.sources[{index}]",
+                errors,
+                identifier_field="source_id",
+            )
+            if source_id is not None:
+                if source_id in direct_ids:
+                    errors.append(f"duplicate external research source id: {source_id}")
+                direct_ids.add(source_id)
+        if set(source_ids_list) != direct_ids:
+            errors.append(f"{path}.source_ids must exactly match direct {path}.sources ids")
+        external_source_ids = direct_ids
+    else:
+        if direct_sources:
+            errors.append(f"{path}.sources is only allowed on a direct routing record")
+
+    _validate_research_evidence(
+        research.get("evidence"), f"{path}.evidence", errors, external_source_ids
+    )
+    if source_map is not None:
+        external_source_records = {
+            source_id: source_map[source_id]
+            for source_id in external_source_ids
+            if source_id in source_map
+        }
+    else:
+        external_source_records = {
+            source.get("source_id"): source
+            for source in direct_sources
+            if isinstance(source, dict) and valid_id(source.get("source_id"))
+        }
+    source_kinds = {
+        source.get("source_kind") for source in external_source_records.values()
+    }
+    if status == "satisfied" and isinstance(target_applicability, dict):
+        for field in ("target_versions", "target_runtimes"):
+            requested_values = set(target_applicability.get(field, []))
+            if requested_values.intersection({"any", "all", "unknown", "not-applicable"}):
+                continue
+            for source_id, source in external_source_records.items():
+                source_applicability = source.get("target_applicability", {})
+                source_values = set(
+                    source_applicability.get(field, [])
+                    if isinstance(source_applicability, dict)
+                    else []
+                )
+                if source_values.intersection({"any", "all", "unknown", "not-applicable"}):
+                    continue
+                if source_values and requested_values.isdisjoint(source_values):
+                    errors.append(
+                        f"{path}.target_applicability.{field} does not match source {source_id}"
+                    )
+    evidence_source_ids = {
+        item.get("source_id")
+        for item in research.get("evidence", [])
+        if isinstance(item, dict)
+    }
+    if mode == "live" and not is_non_empty_string(research.get("live_reason")):
+        errors.append(f"{path}.live_reason must explain why freshness requires live search")
+
+    if decision == "not-required":
+        if status != "not-required":
+            errors.append(f"{path}.status must be 'not-required' when research is not required")
+        if mode != "none":
+            errors.append(f"{path}.mode must be 'none' when research is not required")
+        if research.get("decision_critical") is not False:
+            errors.append(f"{path}.decision_critical must be false when research is not required")
+        if source_ids_list or research.get("evidence"):
+            errors.append(f"{path} must not contain research sources or evidence when not required")
+        if evidence_bar != "not-applicable":
+            errors.append(f"{path}.evidence_bar must be 'not-applicable' when research is not required")
+        if fallback != "not-applicable":
+            errors.append(
+                f"{path}.fallback must be 'not-applicable' when research is not required"
+            )
+    else:
+        if status == "not-required":
+            errors.append(f"{path}.status cannot be 'not-required' when research is selected")
+        if status == "satisfied":
+            if mode == "none":
+                errors.append(f"{path}.mode cannot be 'none' for satisfied research")
+            if not source_ids_list:
+                errors.append(f"{path}.source_ids must contain evidence for satisfied research")
+            if not isinstance(research.get("evidence"), list) or not research.get("evidence"):
+                errors.append(f"{path}.evidence must be non-empty for satisfied research")
+            if fallback not in {"task-evidence", "direct-planner"}:
+                errors.append(f"{path}.fallback must route satisfied research to evidence or Planner search")
+            if mode in {"cached-indexed", "live", "direct-planner"} and capability.get("status") != "available":
+                errors.append(
+                    f"{path}.host_capability.status must be 'available' for satisfied managed research"
+                )
+            if research.get("architecture_relevant") is True:
+                if evidence_bar == "authoritative-plus-maintained":
+                    if "authoritative-upstream" not in source_kinds or "maintained-implementation" not in source_kinds:
+                        errors.append(
+                            f"{path} requires one authoritative-upstream and one maintained-implementation source"
+                        )
+                    evidence_kinds = {
+                        external_source_records[source_id].get("source_kind")
+                        for source_id in evidence_source_ids
+                        if source_id in external_source_records
+                    }
+                    if not {
+                        "authoritative-upstream",
+                        "maintained-implementation",
+                    }.issubset(evidence_kinds):
+                        errors.append(
+                            f"{path}.evidence must cite both authoritative-upstream and maintained-implementation sources"
+                        )
+                elif evidence_bar == "authoritative-only-with-reason":
+                    if not is_non_empty_string(research.get("only_one_source_reason")):
+                        errors.append(
+                            f"{path}.only_one_source_reason is required when only one authoritative source exists"
+                        )
+                    if "authoritative-upstream" not in source_kinds:
+                        errors.append(f"{path} requires an authoritative-upstream source")
+                    if not any(
+                        external_source_records.get(source_id, {}).get("source_kind")
+                        == "authoritative-upstream"
+                        for source_id in evidence_source_ids
+                    ):
+                        errors.append(
+                            f"{path}.evidence must cite the authoritative-upstream source"
+                        )
+                else:
+                    errors.append(
+                        f"{path}.evidence_bar must corroborate architecture with authoritative and maintained evidence"
+                    )
+            elif evidence_bar == "not-applicable":
+                errors.append(
+                    f"{path}.evidence_bar cannot be 'not-applicable' for selected research"
+                )
+            if capability.get("mode") != mode:
+                errors.append(f"{path}.host_capability.mode must match the research mode")
+        elif status == "pending":
+            if fallback != "task-evidence":
+                errors.append(f"{path}.fallback must be 'task-evidence' while research is pending")
+            if mode not in {"cached-indexed", "live"}:
+                errors.append(
+                    f"{path}.mode must be cached-indexed or live while managed research is pending"
+                )
+            if not _managed_request_matches_gate(
+                research, pending_request, pending_task_kind
+            ):
+                errors.append(
+                    f"{path} pending status requires an eligible available verified managed-search task request"
+                )
+        elif status in {"unavailable", "disabled", "insufficient", "blocked"}:
+            if not limitations:
+                errors.append(
+                    f"{path}.limitations must record why selected research is unavailable or insufficient"
+                )
+            if fallback not in {"direct-planner", "uncertain", "blocked"}:
+                errors.append(
+                    f"{path}.fallback must be direct-planner, uncertain, or blocked when research is unavailable"
+                )
+            elif fallback == "direct-planner" and mode != "direct-planner":
+                errors.append(
+                    f"{path}.mode must be direct-planner when the fallback is direct-planner"
+                )
+            elif fallback in {"uncertain", "blocked"} and mode != "none":
+                errors.append(
+                    f"{path}.mode must be none when the fallback is {fallback!r}"
+                )
+            if status in {"unavailable", "disabled", "blocked"} and capability.get(
+                "status"
+            ) == "available":
+                errors.append(
+                    f"{path}.host_capability.status cannot be available for {status!r} research"
+                )
+            if research.get("decision_critical") is True:
+                errors.append(
+                    f"{path} is decision-critical and cannot be approved with status {status!r}"
+                )
+        else:
+            errors.append(f"{path}.status {status!r} is not a usable research result")
+
+    if conflicts and research.get("conflict_resolution") == "No material conflict identified.":
+        errors.append(f"{path}.conflict_resolution must address the recorded conflicts")
+    if status in {"unavailable", "disabled", "insufficient", "blocked"} and not limitations:
+        errors.append(f"{path}.limitations must not be empty for status {status!r}")
+    return research
+
+
 def _validate_plan_task_policy(
     policy: Any, path: str, errors: list[str]
 ) -> dict[str, Any]:
@@ -497,6 +1369,47 @@ def _validate_plan_task_policy(
         errors.append(f"{path}.user_visible_dispatch_notice must be true")
     if policy.get("per_task_approval_required") is not False:
         errors.append(f"{path}.per_task_approval_required must be false within policy")
+    web_policy = policy.get("managed_web_research")
+    if not isinstance(web_policy, dict):
+        errors.append(f"{path}.managed_web_research must be an object")
+    else:
+        missing_web = sorted(
+            REQUIRED_MANAGED_WEB_RESEARCH_POLICY_FIELDS - set(web_policy)
+        )
+        if missing_web:
+            errors.append(
+                f"{path}.managed_web_research is missing fields: {', '.join(missing_web)}"
+            )
+        if web_policy.get("capability") != "managed-web-research":
+            errors.append(
+                f"{path}.managed_web_research.capability must be 'managed-web-research'"
+            )
+        if web_policy.get("allowed_task_kinds") != sorted(VALID_WEB_RESEARCH_TASK_KINDS):
+            errors.append(
+                f"{path}.managed_web_research.allowed_task_kinds must equal the eligible research task kinds"
+            )
+        if web_policy.get("allowed_modes") != ["cached-indexed", "live"]:
+            errors.append(
+                f"{path}.managed_web_research.allowed_modes must be ['cached-indexed', 'live']"
+            )
+        for field, expected in (
+            ("read_only", True),
+            ("shell_network", False),
+            ("external_mutations", False),
+        ):
+            _validate_boolean(
+                web_policy.get(field),
+                f"{path}.managed_web_research.{field}",
+                errors,
+            )
+            if web_policy.get(field) is not expected:
+                errors.append(
+                    f"{path}.managed_web_research.{field} must be exactly {expected!r}"
+                )
+        if web_policy.get("unavailable_fallback") != "direct-planner-or-blocked":
+            errors.append(
+                f"{path}.managed_web_research.unavailable_fallback must be 'direct-planner-or-blocked'"
+            )
     return policy
 
 
@@ -596,6 +1509,7 @@ def _validate_source_descriptors(
         )
         if not is_non_empty_string(source.get("purpose")):
             errors.append(f"{source_path}.purpose must be a non-empty string")
+        _validate_source_metadata(source, source_path, errors)
         sources[source_id] = source
     return sources
 
@@ -625,6 +1539,8 @@ def _validate_response_contract(
         "evidence_fields": EVIDENCE_PACKET_EVIDENCE_FIELDS,
         "fact_fields": EVIDENCE_PACKET_FACT_FIELDS,
         "fact_confidence_values": EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+        "external_source_fields": REQUIRED_EXTERNAL_SOURCE_FIELDS,
+        "research_result_fields": RESEARCH_RESULT_FIELDS,
     }
     for field, value in contract_values.items():
         if response_contract.get(field) != value:
@@ -666,6 +1582,7 @@ def validate_direct_routing(
     """Validate a minimal direct-handling routing record."""
     errors: list[str] = []
     warnings: list[str] = []
+    _reject_forbidden_plan_authority(record, "plan", errors)
     if record.get("schema_version") != SUPPORTED_SCHEMA_VERSION:
         errors.append(f"schema_version must be exactly {SUPPORTED_SCHEMA_VERSION!r}")
     if record.get("envelope_type") != "routing-decision":
@@ -692,6 +1609,12 @@ def validate_direct_routing(
     economics = validate_economics(
         routing.get("economics"), "routing.economics", errors, require_benefit=False
     )
+    research = validate_external_research(
+        record.get("external_research"),
+        "external_research",
+        errors,
+        direct=True,
+    )
     if choose_routing(economics) != "direct":
         warnings.append("direct routing was selected despite positive delegation economics")
     if "tasks" in record or "sources" in record:
@@ -700,7 +1623,11 @@ def validate_direct_routing(
         "valid": not errors,
         "errors": errors,
         "warnings": warnings,
-        "metrics": {"routing_decision": "direct"},
+        "metrics": {
+            "routing_decision": "direct",
+            "external_research_decision": research.get("decision"),
+            "external_research_status": research.get("status"),
+        },
     }
 
 
@@ -710,6 +1637,7 @@ def validate_micro_task(
     """Validate the minimal one-task PLAN envelope without a batch plan."""
     errors: list[str] = []
     warnings: list[str] = []
+    _reject_forbidden_plan_authority(envelope, "plan", errors)
     required = {
         "schema_version",
         "envelope_type",
@@ -729,6 +1657,7 @@ def validate_micro_task(
         "plan_task_policy",
         "plan_task_authorization",
         "model_override",
+        "external_research",
         "response_contract",
         "execution_rules",
     }
@@ -751,8 +1680,30 @@ def validate_micro_task(
     )
     if envelope.get("evidence_required") is not True:
         errors.append("evidence_required must be true for an Evidence Task")
+    web_research = None
+    if "web_research" in envelope:
+        web_research = _validate_web_research_request(
+            envelope.get("web_research"),
+            "web_research",
+            errors,
+            task_kind=envelope.get("task_kind"),
+        )
     sources = _validate_source_descriptors(
-        envelope.get("sources"), "sources", errors, require_one=True
+        envelope.get("sources"),
+        "sources",
+        errors,
+        require_one=not (
+            isinstance(web_research, dict)
+            and web_research.get("requested") is True
+        ),
+    )
+    research = validate_external_research(
+        envelope.get("external_research"),
+        "external_research",
+        errors,
+        source_map=sources,
+        pending_request=web_research,
+        pending_task_kind=envelope.get("task_kind"),
     )
     economics = validate_economics(
         envelope.get("economics"), "economics", errors, require_benefit=True
@@ -809,6 +1760,46 @@ def validate_micro_task(
     _validate_task_execution_rules(
         envelope.get("execution_rules"), "execution_rules", errors
     )
+    try:
+        effective_config = load_effective_config(config_path)
+    except (TypeError, ValueError) as exc:
+        errors.append(str(exc))
+    else:
+        configured_policy = effective_config.get("plan_task_policy")
+        if isinstance(configured_policy, dict) and policy != configured_policy:
+            errors.append(
+                "plan_task_policy must exactly match the effective configuration policy"
+            )
+        configured_research_policy = effective_config.get("external_research_policy")
+        errors.extend(
+            validate_external_research_policy(
+                configured_research_policy, "effective external_research_policy"
+            )
+        )
+    if (
+        research.get("status") == "satisfied"
+        and research.get("mode") in {"cached-indexed", "live"}
+        and (not isinstance(web_research, dict) or web_research.get("requested") is not True)
+    ):
+        errors.append(
+            "satisfied managed research must be routed through an explicit web_research request"
+        )
+    if isinstance(web_research, dict) and web_research.get("requested") is True:
+        _validate_request_against_research_gate(
+            research,
+            web_research,
+            envelope.get("task_kind"),
+            "web_research",
+            errors,
+        )
+        requested_sources = set(research.get("source_ids", []))
+        assigned_sources = set(sources)
+        if research.get("status") == "satisfied" and not requested_sources.intersection(
+            assigned_sources
+        ):
+            errors.append(
+                "web_research task must receive at least one declared research source"
+            )
     if choose_routing(economics) != "micro":
         errors.append("micro-task economics and task count do not justify micro delegation")
     return {
@@ -821,6 +1812,8 @@ def validate_micro_task(
             "source_count": len(sources),
             "estimated_input_tokens": budget.get("estimated_input_tokens"),
             "estimated_result_tokens": economics.get("estimated_result_tokens"),
+            "external_research_decision": research.get("decision"),
+            "external_research_status": research.get("status"),
         },
     }
 
@@ -942,6 +1935,7 @@ def validate_plan(
 
     errors: list[str] = []
     warnings: list[str] = []
+    _reject_forbidden_plan_authority(plan, "plan", errors)
 
     missing = sorted(REQUIRED_TOP_LEVEL_FIELDS - set(plan))
     if missing:
@@ -1181,6 +2175,7 @@ def validate_plan(
             errors.append(f"{path}.estimated_tokens must be an integer >= 1")
         if not is_non_empty_string(source.get("purpose")):
             errors.append(f"{path}.purpose must be a non-empty string")
+        _validate_source_metadata(source, path, errors)
         selector_value = source.get("selector")
         selector_type = (
             selector_value.get("type") if isinstance(selector_value, dict) else None
@@ -1239,6 +2234,13 @@ def validate_plan(
             )
 
         _validate_task_kind(task.get("task_kind"), f"{path}.task_kind", errors)
+        if "web_research" in task:
+            _validate_web_research_request(
+                task.get("web_research"),
+                f"{path}.web_research",
+                errors,
+                task_kind=task.get("task_kind"),
+            )
         if not is_non_empty_string(task.get("agent_role")):
             errors.append(f"{path}.agent_role must be a non-empty string")
         if not is_non_empty_string(task.get("objective")):
@@ -1301,6 +2303,48 @@ def validate_plan(
     cycle = detect_dependency_cycle(task_dependencies)
     if cycle:
         errors.append(f"task dependency cycle detected: {' -> '.join(cycle)}")
+
+    pending_requests = [
+        (task.get("web_research"), task.get("task_kind"))
+        for task in tasks.values()
+        if isinstance(task.get("web_research"), dict)
+        and task["web_research"].get("requested") is True
+    ]
+    research = validate_external_research(
+        plan.get("external_research"),
+        "external_research",
+        errors,
+        source_map=sources,
+        pending_request=pending_requests,
+    )
+
+    web_research_tasks = [
+        task
+        for task in tasks.values()
+        if isinstance(task.get("web_research"), dict)
+        and task["web_research"].get("requested") is True
+    ]
+    if (
+        research.get("status") == "satisfied"
+        and research.get("mode") in {"cached-indexed", "live"}
+        and not web_research_tasks
+    ):
+        errors.append(
+            "satisfied managed research must be routed through a requirement-research or dependency-check task"
+        )
+    for task in web_research_tasks:
+        if task.get("task_kind") not in VALID_WEB_RESEARCH_TASK_KINDS:
+            errors.append(
+                f"task {task.get('id')} cannot receive managed web research; use requirement-research or dependency-check"
+            )
+        request = task.get("web_research", {})
+        _validate_request_against_research_gate(
+            research,
+            request,
+            task.get("task_kind"),
+            f"tasks[{task.get('id')}].web_research",
+            errors,
+        )
 
     if choose_routing(
         economics,
@@ -1434,7 +2478,7 @@ def validate_plan(
                 non_intentional_reader_counts[source_id] += 1
 
         relevant_facts = facts_for_sources(facts, assigned_source_ids)
-        packet_text = {
+        packet_text: dict[str, Any] = {
             "shared": shared_base_context,
             "facts": relevant_facts,
             "agent_role": task.get("agent_role", ""),
@@ -1446,6 +2490,18 @@ def validate_plan(
             "stop_conditions": task.get("stop_conditions", []),
             "allowed_expansion": task.get("allowed_expansion", {}),
         }
+        consumes_external_evidence = any(
+            sources[source_id].get("source_kind") in EXTERNAL_SOURCE_KINDS
+            for source_id in assigned_source_ids
+        )
+        task_research = task.get("web_research")
+        if (
+            isinstance(task_research, dict)
+            and task_research.get("requested") is True
+        ) or consumes_external_evidence:
+            packet_text["external_research"] = research
+        if "web_research" in task:
+            packet_text["web_research"] = task_research
         estimated_packet_tokens = 180 + approximate_tokens(packet_text)
         estimated_input_tokens = assigned_source_tokens + estimated_packet_tokens
         total_estimated_input_tokens += estimated_input_tokens

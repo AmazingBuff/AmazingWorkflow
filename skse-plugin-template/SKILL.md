@@ -37,6 +37,31 @@ the discovered skill's rule paths are part of the required execution context.
 - Verify that an existing generated project still follows this package's
   runtime, build, dependency, Git, and license invariants.
 
+## PLAN external-research binding
+
+The generic conditional `External Research Gate` belongs to
+`lightweight-coding-workflow`; this section binds Skyrim-specific triggers to
+that gate and does not create a second research policy. Mark research
+`required` before approving plugin architecture that depends on CommonLib or
+SKSE APIs, ABI or layout-sensitive code, relocation or vtable hooks, rendering
+or `Present`, event/input/serialization/Papyrus integration, SE/AE/VR runtime
+differences, new dependencies, or copied third-party design. These triggers
+apply even when a local prototype exists if mature upstream or GitHub prior
+art is likely.
+
+The proposal and its Evidence Packet record the target runtime(s), CommonLib
+branch/version, upstream and implementation maintenance status, license and
+reuse status, and the relevant implementation differences. For low-level or
+non-trivial architecture, require authoritative CommonLib/SKSE evidence plus a
+maintained implementation matching the target runtime, or document why only
+one source exists. Check Address Library/relocation identifiers, vtable or
+layout assumptions, renderer lifecycle, and runtime-specific branches rather
+than treating a copied snippet as authority. If required evidence is
+unavailable or insufficient, return to PLAN before approving or changing the
+architecture; never invent a Skyrim-compatible design. Trivial mechanical
+metadata or changes fully determined by local code/tests/canonical project
+documentation may be marked not-required with an explicit reason.
+
 ## Scaffold
 
 Run from this Skill directory:

@@ -85,6 +85,17 @@ An adapter without `read_only_scout_dispatch` remains fully valid and uses
 direct PLAN handling. The capability must never be inferred from
 `worker_dispatch`, the presence of `lightweight_scout`, or documentation alone.
 
+The optional metadata id `managed_web_research` identifies a separate managed,
+read-only web-research capability. It is not implied by
+`read_only_scout_dispatch`, a browser, or documentation. A declared mapping may
+accept only `requirement-research` or `dependency-check` tasks and must preserve
+`shell_network=false` and `external_mutations=false`; it grants no download,
+remote-code execution, authentication, dependency-change, copy, GitHub-write,
+or other external-mutation authority. A host mapping is `available` only after
+a bounded live read-only forward test. Otherwise the capability is recorded as
+unavailable and PLAN uses direct Planner search, an explicit uncertain fallback,
+or `BLOCKED` according to the research gate.
+
 ## PLAN routing and authorization
 
 PLAN routing records one of `direct`, `micro`, or `batch` using the
@@ -134,13 +145,18 @@ preconditions:
    parent transcript.
 
 The operation returns one Evidence Packet per task. The packet uses schema
-`2.0`, `packet_type: "subagent-result"`, a matching task kind, and these exact
+`2.1`, `packet_type: "subagent-result"`, a matching task kind, and these exact
 response requirements:
 
 - finding severity: `low`, `medium`, `high`, or `critical`;
 - finding confidence: `low`, `medium`, or `high`;
 - fact fields: `id`, `statement`, `provenance`, and `confidence`; and
-- fact confidence: `confirmed`, `inferred`, or `unverified`.
+- fact confidence: `confirmed`, `inferred`, or `unverified`;
+- external source fields: source kind, direct URL, repository/project,
+  revision, retrieval date, license/reuse status, target applicability,
+  locator, confidence, and conflicts; and
+- research result fields: status, mode, limitations, uncertainty, conflicts,
+  and conflict resolution.
 
 The Evidence Packet validator remains authoritative and rejects unsupported
 values, missing required fields, mismatched source ids, forbidden expansion,
@@ -198,7 +214,8 @@ approval, writing an approved contract, or allowing WORK writes:
 8. Repeat capability, support-state, model, and version validation immediately
    before dispatch.
 
-Protocol `0.7` has no implicit compatibility range. Approved `0.6.x`
+Protocol `0.7` has no implicit compatibility range. Workflow `0.7.1` uses
+schema `2.1` and configuration revision `3`. Approved `0.7.0` and `0.6.x`
 contracts remain immutable and continue only with their matching historical
 Skill, Core, adapter, schema, and configuration resources. They are not
 paired with `0.7` metadata implicitly. A same-version adapter without the
@@ -254,7 +271,8 @@ each claimed surface and retain evidence for:
 For an adapter declaring `read_only_scout_dispatch`, promotion additionally
 requires a live PLAN micro-task test with Luna/max that confirms exact task
 isolation, model override, policy enforcement, Evidence Packet relay with the
-enums and fact fields above, and unchanged pre/post source worktree state.
+enums, fact fields, external-source records, and research result above, and
+unchanged pre/post source worktree state.
 For Codex, the recorded 2026-09-03 micro-task evidence satisfies this gate for
 the tested task path, so its optional mapping is declared. Other adapters, or
 broader untested paths, remain unclaimed until they retain equivalent evidence;

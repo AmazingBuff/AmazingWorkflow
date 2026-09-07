@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "envelope_type": "batch-plan",
   "plan_id": "payment-timeout-investigation",
   "goal": "Locate the cause of intermittent payment timeouts spanning the API layer, service layer, and database access layer, and gather evidence for an implementation contract.",
@@ -7,8 +7,8 @@
   "configuration": {
     "id": "context-routing-defaults",
     "source": "assets/context-routing/default-config.yaml",
-    "revision": 2,
-    "digest": "sha256:059a56f6711789182135a18676d4ae842cec8f78240ab98202fbdcdd47dc30a7"
+    "revision": 3,
+    "digest": "sha256:9034beef1d2781ae2bbb243d8406864a1adce6985ea8b2705f5ab382046cf6f0"
   },
   "routing": {
     "decision": "batch",
@@ -29,6 +29,41 @@
       "total_token_savings_claimed": false
     }
   },
+  "external_research": {
+    "decision": "not-required",
+    "reason": "This is a bounded local timeout investigation; the assigned source code and logs determine the change without an external API, runtime, hook, dependency, license, or prior-art decision.",
+    "status": "not-required",
+    "mode": "none",
+    "decision_critical": false,
+    "architecture_relevant": false,
+    "evidence_bar": "not-applicable",
+    "target_applicability": {
+      "target_versions": ["not-applicable"],
+      "target_runtimes": ["not-applicable"],
+      "notes": "No external target applies to this local investigation."
+    },
+    "source_ids": [],
+    "sources": [],
+    "evidence": [],
+    "limitations": [],
+    "uncertainty": "No external research was needed for this local evidence task.",
+    "risk": "An architecture change would require returning to PLAN and reevaluating this decision.",
+    "stop_conditions": ["Local source and log evidence fully answer the bounded investigation."],
+    "conflicts": [],
+    "conflict_resolution": "No material conflict identified.",
+    "fallback": "not-applicable",
+    "host_capability": {
+      "capability": "managed-web-research",
+      "status": "not-checked",
+      "mode": "none",
+      "read_only": true,
+      "shell_network": false,
+      "external_mutations": false,
+      "verified": false,
+      "verification_method": "not-applicable",
+      "verification": "No managed web search was requested."
+    }
+  },
   "plan_task_authorization": {
     "authorized": true,
     "model": "gpt-5.6-luna",
@@ -47,7 +82,16 @@
     "allow_external_mutations": false,
     "user_visible_dispatch_notice": true,
     "per_task_approval_required": false,
-    "over_policy": "user-approval-or-direct-fallback"
+    "over_policy": "user-approval-or-direct-fallback",
+    "managed_web_research": {
+      "capability": "managed-web-research",
+      "allowed_task_kinds": ["dependency-check", "requirement-research"],
+      "allowed_modes": ["cached-indexed", "live"],
+      "read_only": true,
+      "shell_network": false,
+      "external_mutations": false,
+      "unavailable_fallback": "direct-planner-or-blocked"
+    }
   },
   "assumptions": [
     "Source descriptors refer to one consistent repository revision.",
@@ -90,6 +134,7 @@
       "selector": {"type": "lines", "start": 1, "end": 120},
       "estimated_tokens": 900,
       "purpose": "Shared request/response types and error codes used across all layers",
+      "source_kind": "local-code",
       "summary": "Small common interface needed by API and service tasks."
     },
     {
@@ -97,28 +142,32 @@
       "uri": "src/api/payment_controller.py",
       "selector": {"type": "symbol", "name": "PaymentController.submit"},
       "estimated_tokens": 1400,
-      "purpose": "Payment submission endpoint, timeout configuration, retry behavior"
+      "purpose": "Payment submission endpoint, timeout configuration, retry behavior",
+      "source_kind": "local-code"
     },
     {
       "id": "src-service-layer",
       "uri": "src/services/payment_service.py",
       "selector": {"type": "lines", "start": 40, "end": 320},
       "estimated_tokens": 2600,
-      "purpose": "Payment orchestration, transaction boundaries, downstream calls"
+      "purpose": "Payment orchestration, transaction boundaries, downstream calls",
+      "source_kind": "local-code"
     },
     {
       "id": "src-db-pool",
       "uri": "src/db/connection_pool.py",
       "selector": {"type": "lines", "start": 1, "end": 180},
       "estimated_tokens": 1500,
-      "purpose": "Connection pooling, lease handling, timeout propagation"
+      "purpose": "Connection pooling, lease handling, timeout propagation",
+      "source_kind": "local-code"
     },
     {
       "id": "src-logs-sample",
       "uri": "logs/payment_timeouts.log",
       "selector": {"type": "lines", "start": 1, "end": 200},
       "estimated_tokens": 1100,
-      "purpose": "Timestamped timeout traces correlating requests across layers"
+      "purpose": "Timestamped timeout traces correlating requests across layers",
+      "source_kind": "local-log"
     }
   ],
   "tasks": [

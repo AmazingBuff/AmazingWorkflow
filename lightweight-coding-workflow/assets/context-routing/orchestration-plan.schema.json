@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:lightweight-coding-workflow:orchestration-plan-schema:2.0",
+  "$id": "urn:lightweight-coding-workflow:orchestration-plan-schema:2.1",
   "title": "PLAN routing and task envelope",
   "type": "object",
   "additionalProperties": true,
@@ -95,13 +95,44 @@
     },
     "source": {
       "type": "object",
-      "required": ["id", "uri", "selector", "estimated_tokens", "purpose"],
+      "required": ["id", "uri", "selector", "estimated_tokens", "purpose", "source_kind"],
       "properties": {
         "id": {"$ref": "#/$defs/identifier"},
         "uri": {"type": "string", "minLength": 1},
         "selector": {"$ref": "#/$defs/selector"},
         "estimated_tokens": {"$ref": "#/$defs/positiveInteger"},
         "purpose": {"type": "string", "minLength": 1},
+        "source_kind": {
+          "enum": [
+            "local-code",
+            "local-test",
+            "local-documentation",
+            "local-log",
+            "local-other",
+            "authoritative-upstream",
+            "maintained-implementation",
+            "upstream-issue",
+            "community-secondary"
+          ]
+        },
+        "repository": {"type": "string", "minLength": 1},
+        "project": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "retrieved_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "license": {"type": "string", "minLength": 1},
+        "reuse_status": {
+          "enum": [
+            "not-reused",
+            "reviewed-permitted",
+            "review-required",
+            "prohibited",
+            "unknown"
+          ]
+        },
+        "target_applicability": {"$ref": "#/$defs/targetApplicability"},
+        "locator": {"type": "string", "minLength": 1},
+        "confidence": {"enum": ["low", "medium", "high"]},
+        "conflicts": {"$ref": "#/$defs/stringArray"},
         "summary": {"type": "string"},
         "content_hash": {"type": "string"}
       },
@@ -147,7 +178,8 @@
         "allow_external_mutations",
         "user_visible_dispatch_notice",
         "per_task_approval_required",
-        "over_policy"
+        "over_policy",
+        "managed_web_research"
       ],
       "properties": {
         "model": {"const": "gpt-5.6-luna"},
@@ -160,7 +192,8 @@
         "allow_external_mutations": {"const": false},
         "user_visible_dispatch_notice": {"const": true},
         "per_task_approval_required": {"const": false},
-        "over_policy": {"const": "user-approval-or-direct-fallback"}
+        "over_policy": {"const": "user-approval-or-direct-fallback"},
+        "managed_web_research": {"$ref": "#/$defs/managedWebResearchPolicy"}
       },
       "additionalProperties": true
     },
@@ -274,6 +307,7 @@
         "intentional_overlap": {"type": "boolean"},
         "capabilities": {"$ref": "#/$defs/stringArray"},
         "allowed_expansion": {"$ref": "#/$defs/expansionPolicy"},
+        "web_research": {"$ref": "#/$defs/webResearchRequest"},
         "stop_conditions": {"$ref": "#/$defs/stringArray"},
         "inherit_shared_sources": {"type": "boolean", "default": true}
       },
@@ -307,6 +341,234 @@
       },
       "additionalProperties": true
     },
+    "targetApplicability": {
+      "type": "object",
+      "required": ["target_versions", "target_runtimes", "notes"],
+      "properties": {
+        "target_versions": {"$ref": "#/$defs/stringArray"},
+        "target_runtimes": {"$ref": "#/$defs/stringArray"},
+        "notes": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "managedWebResearchPolicy": {
+      "type": "object",
+      "required": [
+        "capability",
+        "allowed_task_kinds",
+        "allowed_modes",
+        "read_only",
+        "shell_network",
+        "external_mutations",
+        "unavailable_fallback"
+      ],
+      "properties": {
+        "capability": {"const": "managed-web-research"},
+        "allowed_task_kinds": {"const": ["dependency-check", "requirement-research"]},
+        "allowed_modes": {"const": ["cached-indexed", "live"]},
+        "read_only": {"const": true},
+        "shell_network": {"const": false},
+        "external_mutations": {"const": false},
+        "unavailable_fallback": {"const": "direct-planner-or-blocked"}
+      },
+      "additionalProperties": true
+    },
+    "webResearchRequest": {
+      "type": "object",
+      "required": [
+        "requested",
+        "mode",
+        "capability",
+        "availability",
+        "fallback",
+        "reason",
+        "read_only",
+        "shell_network",
+        "external_mutations"
+      ],
+      "properties": {
+        "requested": {"type": "boolean"},
+        "mode": {"enum": ["cached-indexed", "live", "none"]},
+        "capability": {"const": "managed-web-research"},
+        "availability": {
+          "enum": ["available", "unavailable", "disabled", "insufficient"]
+        },
+        "fallback": {
+          "enum": ["task-evidence", "direct-planner", "blocked", "uncertain", "not-applicable"]
+        },
+        "reason": {"type": "string", "minLength": 1},
+        "read_only": {"const": true},
+        "shell_network": {"const": false},
+        "external_mutations": {"const": false}
+      },
+      "additionalProperties": true
+    },
+    "hostCapability": {
+      "type": "object",
+      "required": [
+        "capability",
+        "status",
+        "mode",
+        "read_only",
+        "shell_network",
+        "external_mutations",
+        "verified",
+        "verification_method",
+        "verification"
+      ],
+      "properties": {
+        "capability": {"const": "managed-web-research"},
+        "status": {
+          "enum": ["available", "unavailable", "disabled", "insufficient", "not-checked"]
+        },
+        "mode": {
+          "enum": ["cached-indexed", "live", "direct-planner", "none"]
+        },
+        "read_only": {"const": true},
+        "shell_network": {"const": false},
+        "external_mutations": {"const": false},
+        "verified": {"type": "boolean"},
+        "verification_method": {"type": "string", "minLength": 1},
+        "verification": {"type": "string", "minLength": 1},
+        "verified_on": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+      },
+      "additionalProperties": true
+    },
+    "researchEvidence": {
+      "type": "object",
+      "required": ["source_id", "locator", "note", "confidence"],
+      "properties": {
+        "source_id": {"$ref": "#/$defs/identifier"},
+        "locator": {"type": "string", "minLength": 1},
+        "note": {"type": "string", "minLength": 1},
+        "confidence": {"enum": ["low", "medium", "high"]},
+        "conflicts": {"$ref": "#/$defs/stringArray"}
+      },
+      "additionalProperties": true
+    },
+    "externalSourceEvidence": {
+      "type": "object",
+      "required": [
+        "source_id",
+        "source_kind",
+        "uri",
+        "revision",
+        "retrieved_at",
+        "license",
+        "reuse_status",
+        "target_applicability",
+        "locator",
+        "confidence",
+        "conflicts"
+      ],
+      "properties": {
+        "source_id": {"$ref": "#/$defs/identifier"},
+        "source_kind": {
+          "enum": [
+            "authoritative-upstream",
+            "maintained-implementation",
+            "upstream-issue",
+            "community-secondary"
+          ]
+        },
+        "uri": {"type": "string", "pattern": "^https?://[^\\s]+$"},
+        "repository": {"type": "string", "minLength": 1},
+        "project": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "retrieved_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "license": {"type": "string", "minLength": 1},
+        "reuse_status": {
+          "enum": [
+            "not-reused",
+            "reviewed-permitted",
+            "review-required",
+            "prohibited",
+            "unknown"
+          ]
+        },
+        "target_applicability": {"$ref": "#/$defs/targetApplicability"},
+        "locator": {"type": "string", "minLength": 1},
+        "confidence": {"enum": ["low", "medium", "high"]},
+        "conflicts": {"$ref": "#/$defs/stringArray"}
+      },
+      "anyOf": [
+        {"required": ["repository"]},
+        {"required": ["project"]}
+      ],
+      "additionalProperties": true
+    },
+    "externalResearch": {
+      "type": "object",
+      "required": [
+        "decision",
+        "reason",
+        "status",
+        "mode",
+        "decision_critical",
+        "architecture_relevant",
+        "evidence_bar",
+        "target_applicability",
+        "source_ids",
+        "evidence",
+        "limitations",
+        "uncertainty",
+        "risk",
+        "stop_conditions",
+        "conflicts",
+        "conflict_resolution",
+        "fallback",
+        "host_capability"
+      ],
+      "properties": {
+        "decision": {"enum": ["required", "recommended", "not-required"]},
+        "reason": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": [
+            "satisfied",
+            "not-required",
+            "pending",
+            "unavailable",
+            "disabled",
+            "insufficient",
+            "blocked"
+          ]
+        },
+        "mode": {"enum": ["cached-indexed", "live", "direct-planner", "none"]},
+        "decision_critical": {"type": "boolean"},
+        "architecture_relevant": {"type": "boolean"},
+        "evidence_bar": {
+          "enum": [
+            "authoritative-plus-maintained",
+            "authoritative-only-with-reason",
+            "context-only",
+            "not-applicable"
+          ]
+        },
+        "target_applicability": {"$ref": "#/$defs/targetApplicability"},
+        "source_ids": {"$ref": "#/$defs/stringArray"},
+        "sources": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/externalSourceEvidence"}
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/researchEvidence"}
+        },
+        "limitations": {"$ref": "#/$defs/stringArray"},
+        "uncertainty": {"type": "string", "minLength": 1},
+        "risk": {"type": "string", "minLength": 1},
+        "stop_conditions": {"$ref": "#/$defs/stringArray"},
+        "conflicts": {"$ref": "#/$defs/stringArray"},
+        "conflict_resolution": {"type": "string", "minLength": 1},
+        "fallback": {
+          "enum": ["task-evidence", "direct-planner", "blocked", "uncertain", "not-applicable"]
+        },
+        "live_reason": {"type": "string", "minLength": 1},
+        "only_one_source_reason": {"type": "string", "minLength": 1},
+        "host_capability": {"$ref": "#/$defs/hostCapability"}
+      },
+      "additionalProperties": true
+    },
     "responseContract": {
       "type": "object",
       "required": [
@@ -319,10 +581,12 @@
         "finding_confidence_values",
         "evidence_fields",
         "fact_fields",
-        "fact_confidence_values"
+        "fact_confidence_values",
+        "external_source_fields",
+        "research_result_fields"
       ],
       "properties": {
-        "schema_version": {"const": "2.0"},
+        "schema_version": {"const": "2.1"},
         "packet_type": {"const": "subagent-result"},
         "schema_ref": {"const": "assets/context-routing/evidence-packet.schema.json"},
         "validation_authority": {"const": "scripts/validate_evidence_packet.py"},
@@ -343,6 +607,33 @@
         },
         "fact_confidence_values": {
           "const": ["confirmed", "inferred", "unverified"]
+        },
+        "external_source_fields": {
+          "const": [
+            "source_id",
+            "source_kind",
+            "uri",
+            "repository",
+            "project",
+            "revision",
+            "retrieved_at",
+            "license",
+            "reuse_status",
+            "target_applicability",
+            "locator",
+            "confidence",
+            "conflicts"
+          ]
+        },
+        "research_result_fields": {
+          "const": [
+            "status",
+            "mode",
+            "limitations",
+            "uncertainty",
+            "conflicts",
+            "conflict_resolution"
+          ]
         }
       },
       "additionalProperties": true
@@ -379,6 +670,7 @@
         "mode",
         "configuration",
         "routing",
+        "external_research",
         "plan_task_authorization",
         "plan_task_policy",
         "budget",
@@ -389,12 +681,13 @@
       ],
       "properties": {
         "envelope_type": {"const": "batch-plan"},
-        "schema_version": {"const": "2.0"},
+        "schema_version": {"const": "2.1"},
         "plan_id": {"$ref": "#/$defs/identifier"},
         "goal": {"type": "string", "minLength": 1},
         "mode": {"enum": ["lean", "balanced", "independent-review", "high-assurance"]},
         "configuration": {"$ref": "#/$defs/configuration"},
         "routing": {"$ref": "#/$defs/batchRouting"},
+        "external_research": {"$ref": "#/$defs/externalResearch"},
         "plan_task_authorization": {"$ref": "#/$defs/planTaskAuthorization"},
         "plan_task_policy": {"$ref": "#/$defs/planTaskPolicy"},
         "assumptions": {"$ref": "#/$defs/stringArray"},
@@ -437,11 +730,12 @@
         "plan_task_policy",
         "plan_task_authorization",
         "model_override",
+        "external_research",
         "response_contract",
         "execution_rules"
       ],
       "properties": {
-        "schema_version": {"const": "2.0"},
+        "schema_version": {"const": "2.1"},
         "envelope_type": {"const": "micro-task"},
         "plan_id": {"$ref": "#/$defs/identifier"},
         "task_id": {"$ref": "#/$defs/identifier"},
@@ -452,7 +746,7 @@
         "objective": {"type": "string", "minLength": 1},
         "query": {"type": "string", "minLength": 1},
         "questions": {"$ref": "#/$defs/stringArray"},
-        "sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
+        "sources": {"type": "array", "items": {"$ref": "#/$defs/source"}},
         "deliverable": {"type": "string", "minLength": 1},
         "stop_conditions": {"$ref": "#/$defs/stringArray"},
         "evidence_required": {"const": true},
@@ -471,6 +765,8 @@
           },
           "additionalProperties": true
         },
+        "external_research": {"$ref": "#/$defs/externalResearch"},
+        "web_research": {"$ref": "#/$defs/webResearchRequest"},
         "configuration": {"$ref": "#/$defs/configuration"},
         "response_contract": {"$ref": "#/$defs/responseContract"},
         "execution_rules": {"$ref": "#/$defs/executionRules"}
@@ -479,9 +775,16 @@
     },
     "directRouting": {
       "type": "object",
-      "required": ["schema_version", "envelope_type", "plan_id", "goal", "routing"],
+      "required": [
+        "schema_version",
+        "envelope_type",
+        "plan_id",
+        "goal",
+        "routing",
+        "external_research"
+      ],
       "properties": {
-        "schema_version": {"const": "2.0"},
+        "schema_version": {"const": "2.1"},
         "envelope_type": {"const": "routing-decision"},
         "plan_id": {"$ref": "#/$defs/identifier"},
         "goal": {"type": "string", "minLength": 1},
@@ -490,7 +793,8 @@
             {"$ref": "#/$defs/routing"},
             {"properties": {"decision": {"const": "direct"}}}
           ]
-        }
+        },
+        "external_research": {"$ref": "#/$defs/externalResearch"}
       },
       "additionalProperties": true
     }

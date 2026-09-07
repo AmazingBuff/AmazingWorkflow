@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ from validate_evidence_packet import (
     EVIDENCE_PACKET_FINDING_SEVERITY_VALUES,
     EVIDENCE_PACKET_REQUIRED_FIELDS,
     EVIDENCE_PACKET_TOP_LEVEL_OPTIONAL_FIELDS,
+    validate_evidence_packet,
 )
 from validate_plan import (
     DEFAULT_CONFIG_RELATIVE_PATH,
@@ -29,8 +31,14 @@ from validate_plan import (
     PLAN_TASK_REASONING_EFFORT,
     READ_ONLY_TASK_KINDS,
     REQUIRED_BUDGET_FIELDS,
+    REQUIRED_EXTERNAL_RESEARCH_FIELDS,
+    REQUIRED_EXTERNAL_RESEARCH_POLICY_FIELDS,
+    REQUIRED_EXTERNAL_SOURCE_FIELDS,
+    REQUIRED_MANAGED_WEB_RESEARCH_POLICY_FIELDS,
     REQUIRED_TASK_FIELDS,
     REQUIRED_TOP_LEVEL_FIELDS,
+    RESEARCH_RESULT_FIELDS,
+    SUPPORTED_CONFIG_REVISION,
     SUPPORTED_SCHEMA_VERSION,
     VALID_EXPANSION_MODES,
     VALID_MODES,
@@ -38,13 +46,14 @@ from validate_plan import (
     load_plan,
     sha256_text_normalized,
     validate_direct_routing,
+    validate_external_research,
     validate_micro_task,
     validate_plan,
 )
 
-PLAN_SCHEMA_ID = "urn:lightweight-coding-workflow:orchestration-plan-schema:2.0"
-EVIDENCE_SCHEMA_ID = "urn:lightweight-coding-workflow:evidence-packet-schema:2.0"
-WORKFLOW_REVISION = "0.7.0"
+PLAN_SCHEMA_ID = "urn:lightweight-coding-workflow:orchestration-plan-schema:2.1"
+EVIDENCE_SCHEMA_ID = "urn:lightweight-coding-workflow:evidence-packet-schema:2.1"
+WORKFLOW_REVISION = "0.7.1"
 CORE_PROTOCOL_VERSION = "0.7"
 CODEX_ADAPTER_VERSION = "0.7"
 ADAPTER_CONTRACT_VERSION = "0.7"
@@ -57,7 +66,43 @@ HISTORICAL_CONTRACT_EVIDENCE = {
     ): {
         "protocol_sha256": "sha256:90decc027d54e93bf9cb5ebae9ee4c74f17b57e8ae98c9b231281eebd3d299f1",
         "adapter_sha256": "sha256:45f4267ca861558959e8a8b2b7a51ae27d4311dcc3d3bb44ec6f3551376ba26d",
-    }
+    },
+    (
+        "0.7.0",
+        "0.7",
+        "codex",
+        "0.7",
+    ): {
+        "protocol_sha256": "sha256:c88071c87fbc2253781bdf603b7e1877297a264bc62f9bc1a3cbc9274b5ee019",
+        "adapter_sha256": "sha256:56f2a571a08b1a0bca62a4209af46ec379e52b226ad006e0a1dc5fc85507a1ae",
+    },
+    (
+        "0.7.0",
+        "0.7",
+        "dsh",
+        "0.7",
+    ): {
+        "protocol_sha256": "sha256:c88071c87fbc2253781bdf603b7e1877297a264bc62f9bc1a3cbc9274b5ee019",
+        "adapter_sha256": "sha256:819cba47d62761ef68ae843964e2847cb85ea17ae4452c7f29bafe2a3f718e28",
+    },
+    (
+        "0.7.0",
+        "0.7",
+        "zcode",
+        "0.3",
+    ): {
+        "protocol_sha256": "sha256:c88071c87fbc2253781bdf603b7e1877297a264bc62f9bc1a3cbc9274b5ee019",
+        "adapter_sha256": "sha256:e38ceb89876bac904084ccbd29444b4cb91020b4993cc395a86d60376540bd2c",
+    },
+    (
+        "0.7.0",
+        "0.7",
+        "workbuddy",
+        "0.2",
+    ): {
+        "protocol_sha256": "sha256:c88071c87fbc2253781bdf603b7e1877297a264bc62f9bc1a3cbc9274b5ee019",
+        "adapter_sha256": "sha256:33f30169b6d1f5c290c022b07d57bbfe03c265754941bb5d5cb77b08d7433746",
+    },
 }
 CONTRACT_EVIDENCE_FIELDS = (
     "workflow_revision",
@@ -466,6 +511,125 @@ def validate_approved_contract(
     return errors
 
 
+def _fixture_external_source(
+    source_id: str, source_kind: str, *, packet: bool = False
+) -> dict[str, Any]:
+    source = {
+        "source_kind": source_kind,
+        "uri": f"https://example.test/{source_id}",
+        "repository": "example/project",
+        "revision": "v1.2.3",
+        "retrieved_at": "2026-09-07",
+        "license": "Apache-2.0",
+        "reuse_status": "not-reused",
+        "target_applicability": {
+            "target_versions": ["v1"],
+            "target_runtimes": ["runtime-a"],
+            "notes": "Matches the test target.",
+        },
+        "locator": "README.md#design",
+        "confidence": "high",
+        "conflicts": [],
+    }
+    if packet:
+        source["source_id"] = source_id
+    else:
+        source["id"] = source_id
+        source.update(
+            {
+                "selector": {"type": "query", "query": "design"},
+                "estimated_tokens": 100,
+                "purpose": "Pinned external design evidence",
+            }
+        )
+    return source
+
+
+def _fixture_research_gate(
+    *,
+    decision: str,
+    status: str,
+    mode: str,
+    source_ids: list[str] | None = None,
+    sources: list[dict[str, Any]] | None = None,
+    fallback: str | None = None,
+    decision_critical: bool | None = None,
+) -> dict[str, Any]:
+    source_ids = source_ids or []
+    sources = sources or []
+    satisfied = status == "satisfied"
+    unavailable = status in {"unavailable", "disabled", "insufficient", "blocked"}
+    if decision_critical is None:
+        decision_critical = decision == "required" and status != "not-required"
+    if fallback is None:
+        fallback = "direct-planner" if satisfied else (
+            "blocked" if decision_critical else "uncertain"
+        )
+    gate = {
+        "decision": decision,
+        "reason": "The bounded fixture records the external compatibility decision.",
+        "status": status,
+        "mode": mode,
+        "decision_critical": decision_critical,
+        "architecture_relevant": satisfied,
+        "evidence_bar": (
+            "authoritative-plus-maintained"
+            if satisfied
+            else "context-only"
+            if decision != "not-required"
+            else "not-applicable"
+        ),
+        "target_applicability": {
+            "target_versions": ["v1"] if decision != "not-required" else ["not-applicable"],
+            "target_runtimes": ["runtime-a"]
+            if decision != "not-required"
+            else ["not-applicable"],
+            "notes": "Target is pinned." if decision != "not-required" else "No external target applies.",
+        },
+        "source_ids": source_ids,
+        "sources": sources,
+        "evidence": [
+            {
+                "source_id": source_id,
+                "locator": "README.md#design",
+                "note": "Recorded fixture evidence.",
+                "confidence": "high",
+                "conflicts": [],
+            }
+            for source_id in source_ids
+        ],
+        "limitations": ["Managed search is unavailable."] if unavailable else [],
+        "uncertainty": "Pinned fixture evidence is applicable."
+        if satisfied
+        else "External behavior remains unverified.",
+        "risk": "A future target release may differ."
+        if satisfied
+        else "Inventing the design may break compatibility.",
+        "stop_conditions": ["The bounded evidence condition is recorded."],
+        "conflicts": [],
+        "conflict_resolution": "No material conflict identified.",
+        "fallback": fallback,
+        "host_capability": {
+            "capability": "managed-web-research",
+            "status": "available" if satisfied or status == "pending" else "unavailable",
+            "mode": mode if satisfied or status == "pending" else "none",
+            "read_only": True,
+            "shell_network": False,
+            "external_mutations": False,
+            "verified": satisfied or status == "pending",
+            "verification_method": "live-read-only-forward-test"
+            if satisfied or status == "pending"
+            else "not-run",
+            "verification": "Bounded fixture capability verification.",
+        },
+    }
+    if satisfied or status == "pending":
+        gate["host_capability"]["verified_on"] = "2026-09-07"
+    if mode == "live":
+        gate["live_reason"] = "Current compatibility may have changed."
+    return gate
+
+
 def check_contract_parity(root: Path) -> dict[str, Any]:
     errors: list[str] = []
     schema_path = root / "assets/context-routing/orchestration-plan.schema.json"
@@ -479,6 +643,9 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
     protocol_path = root / "references/protocol.md"
     adapter_path = root / "references/adapters/codex.md"
     adapter_contract_path = root / "references/adapter-contract.md"
+    skse_skill_path = root.parent / "skse-plugin-template/SKILL.md"
+    skse_build_path = root.parent / "skse-plugin-template/references/build-and-verify.md"
+    skse_runtime_path = root.parent / "skse-plugin-template/references/multi-runtime.md"
 
     try:
         plan_schema = load_json(schema_path)
@@ -505,6 +672,22 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         "batch plan required fields",
         errors,
     )
+    check_equal(
+        set(plan_schema.get("$defs", {}).get("externalResearch", {}).get("required", [])),
+        REQUIRED_EXTERNAL_RESEARCH_FIELDS,
+        "external research gate required fields",
+        errors,
+    )
+    check_equal(
+        set(
+            plan_schema.get("$defs", {})
+            .get("managedWebResearchPolicy", {})
+            .get("required", [])
+        ),
+        REQUIRED_MANAGED_WEB_RESEARCH_POLICY_FIELDS,
+        "managed web research policy fields",
+        errors,
+    )
     expansion_enum = (
         plan_schema.get("$defs", {})
         .get("expansionPolicy", {})
@@ -523,6 +706,12 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         ),
         REQUIRED_TASK_FIELDS,
         "task required fields",
+        errors,
+    )
+    check_equal(
+        plan_schema.get("$defs", {}).get("source", {}).get("required", []),
+        ["id", "uri", "selector", "estimated_tokens", "purpose", "source_kind"],
+        "source descriptor required fields",
         errors,
     )
     budget_schema_fields = set(
@@ -550,6 +739,7 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         "plan_task_policy",
         "plan_task_authorization",
         "model_override",
+        "external_research",
         "response_contract",
         "execution_rules",
     }
@@ -579,6 +769,32 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         evidence_schema.get("required", []),
         EVIDENCE_PACKET_REQUIRED_FIELDS,
         "Evidence Packet required fields",
+        errors,
+    )
+    check_equal(
+        evidence_schema.get("$defs", {})
+        .get("externalSourceEvidence", {})
+        .get("required", []),
+        [
+            "source_id",
+            "source_kind",
+            "uri",
+            "revision",
+            "retrieved_at",
+            "license",
+            "reuse_status",
+            "target_applicability",
+            "locator",
+            "confidence",
+            "conflicts",
+        ],
+        "Evidence Packet external source fields",
+        errors,
+    )
+    check_equal(
+        evidence_schema.get("$defs", {}).get("researchResult", {}).get("required", []),
+        RESEARCH_RESULT_FIELDS,
+        "Evidence Packet research result fields",
         errors,
     )
     check_equal(
@@ -631,6 +847,43 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
     configured_modes = config.get("scout_policy", {}).get("allowed_expansion_modes")
     check_equal(
         configured_modes, sorted(VALID_EXPANSION_MODES), "configured expansion modes", errors
+    )
+    check_equal(
+        config.get("schema_version"),
+        SUPPORTED_SCHEMA_VERSION,
+        "configuration schema version",
+        errors,
+    )
+    check_equal(
+        config.get("config_revision"),
+        SUPPORTED_CONFIG_REVISION,
+        "configuration revision",
+        errors,
+    )
+    research_policy = config.get("external_research_policy", {})
+    check_equal(
+        set(research_policy) >= REQUIRED_EXTERNAL_RESEARCH_POLICY_FIELDS,
+        True,
+        "external research policy completeness",
+        errors,
+    )
+    check_equal(
+        research_policy.get("allowed_decisions"),
+        ["not-required", "recommended", "required"],
+        "external research decisions",
+        errors,
+    )
+    check_equal(
+        research_policy.get("architecture_evidence_bar"),
+        "authoritative-plus-maintained-or-explained-single-source",
+        "external research architecture evidence bar",
+        errors,
+    )
+    check_equal(
+        config.get("plan_task_policy", {}).get("managed_web_research", {}).get("allowed_task_kinds"),
+        ["dependency-check", "requirement-research"],
+        "managed web research task kinds",
+        errors,
     )
     check_equal(
         config.get("scout_policy", {}).get("response_schema_version"),
@@ -694,6 +947,15 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             "low, medium, or high",
             "id, statement, provenance, and confidence",
             "confirmed, inferred, or unverified",
+            "external_sources",
+            "research_result",
+            "shell network access",
+            "untrusted evidence",
+            "When web_research.requested=true, execute only the exact authorized query/questions, mode, budget, and stop conditions.",
+            "URLs discovered by that exact managed query are in-scope evidence records",
+            "do not require per-result expansion approval",
+            "Any additional query, domain, or scope requires an expansion request before reading it.",
+            "Discovery never grants download, third-party reuse/copying, write, or external-mutation authority.",
         }
         for term in sorted(required_agent_terms):
             if term not in agent_text:
@@ -736,6 +998,9 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         protocol_text = protocol_path.read_text(encoding="utf-8")
         adapter_text = adapter_path.read_text(encoding="utf-8")
         adapter_contract_text = adapter_contract_path.read_text(encoding="utf-8")
+        skse_skill_text = skse_skill_path.read_text(encoding="utf-8")
+        skse_build_text = skse_build_path.read_text(encoding="utf-8")
+        skse_runtime_text = skse_runtime_path.read_text(encoding="utf-8")
         adapter_meta = read_adapter_front_matter(adapter_path)
         config_path.read_text(encoding="utf-8")
         example_path.read_text(encoding="utf-8")
@@ -753,6 +1018,10 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             "Codex verified optional PLAN-task capabilities",
             errors,
         )
+        if "managed_web_research" in (adapter_meta.get("optional_capabilities") or []):
+            errors.append(
+                "Codex managed_web_research cannot be promoted from documentation alone"
+            )
         if 'revision: {{REVISION}}' not in template_text:
             errors.append("implementation-contract template must retain the revision placeholder")
         if 'status: "DRAFT"' not in template_text:
@@ -791,6 +1060,10 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             "Host Adapter Contract version",
             errors,
         )
+        if "not revalidated against `0.7.0` files" in protocol_text:
+            errors.append("Protocol historical wording still names 0.7.0 as the current resource")
+        if "not revalidated against current `0.7.1`" not in protocol_text:
+            errors.append("Protocol historical wording must identify current 0.7.1 resources")
         required_live_evidence_terms = {
             "Live evidence recorded 2026-09-03",
             "real `lightweight_scout` micro",
@@ -802,6 +1075,9 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             "used no expansion",
             "byte-for-byte identical",
             "does not by itself exercise expansion handling",
+            "Managed web research is not declared",
+            "live read-only",
+            "Documentation or a browser surface alone cannot promote",
         }
         for term in sorted(required_live_evidence_terms):
             if term not in adapter_text:
@@ -842,6 +1118,8 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             "pass_parent_transcript",
             "read_only_scout_dispatch",
             "dispatch_scout",
+            "managed_web_research",
+            "web-research capability",
             "no complete parent transcript",
             "without granting writes",
             "finding severity",
@@ -853,6 +1131,57 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
                 errors.append(
                     f"Host Adapter Contract is missing required PLAN-task term: {term}"
                 )
+        required_skse_terms = {
+            "External Research Gate",
+            "CommonLib",
+            "SKSE APIs",
+            "ABI or layout-sensitive",
+            "relocation or vtable hooks",
+            "rendering",
+            "`Present`",
+            "event/input/serialization/Papyrus integration",
+            "SE, AE, or VR",
+            "maintenance status",
+            "license",
+            "reuse status",
+            "implementation differences",
+            "maintained implementation",
+            "return to PLAN",
+        }
+        for term in sorted(required_skse_terms):
+            if term not in skse_skill_text:
+                errors.append(f"SKSE research binding is missing required term: {term}")
+        required_generic_research_terms = {
+            "External Research Gate",
+            "`required`, `recommended`, or `not-required`",
+            "decision-critical",
+            "cached or indexed search",
+            "live read-only forward test",
+            "untrusted evidence",
+            "shell-network access",
+            "returns to PLAN",
+            "per-result expansion",
+            "additional query, domain, or scope requires an expansion request",
+            "Discovery grants no download, reuse, copying, write, or mutation authority",
+        }
+        for term in sorted(required_generic_research_terms):
+            if term not in skill_text:
+                errors.append(f"workflow Skill is missing research policy term: {term}")
+        for label, text_value in (
+            ("SKSE build reference", skse_build_text),
+            ("SKSE runtime reference", skse_runtime_text),
+        ):
+            for term in (
+                "target runtime",
+                "CommonLib",
+                "branch",
+                "maintenance",
+                "license",
+                "implementation",
+                "difference",
+            ):
+                if term.lower() not in text_value.lower():
+                    errors.append(f"{label} is missing research-check term: {term}")
         if "discovery_authorization.authorized" in adapter_contract_text:
             errors.append(
                 "Host Adapter Contract retains obsolete discovery_authorization authorization semantics"
@@ -948,6 +1277,18 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             errors,
         )
         check_equal(
+            response_contract.get("external_source_fields"),
+            REQUIRED_EXTERNAL_SOURCE_FIELDS,
+            "generated external source fields",
+            errors,
+        )
+        check_equal(
+            response_contract.get("research_result_fields"),
+            RESEARCH_RESULT_FIELDS,
+            "generated research result fields",
+            errors,
+        )
+        check_equal(
             response_contract.get("required_fields"),
             EVIDENCE_PACKET_REQUIRED_FIELDS,
             "generated response required fields",
@@ -988,6 +1329,7 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
                     "selector": {"type": "symbol", "name": "main"},
                     "estimated_tokens": 120,
                     "purpose": "Entry-point definition",
+                    "source_kind": "local-code",
                 }
             ],
             "deliverable": "One cited fact.",
@@ -1023,6 +1365,41 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
                 "reasoning_effort": PLAN_TASK_REASONING_EFFORT,
                 "explicit": True,
             },
+            "external_research": {
+                "decision": "not-required",
+                "reason": "The bounded repository read is fully determined by its local source.",
+                "status": "not-required",
+                "mode": "none",
+                "decision_critical": False,
+                "architecture_relevant": False,
+                "evidence_bar": "not-applicable",
+                "target_applicability": {
+                    "target_versions": ["not-applicable"],
+                    "target_runtimes": ["not-applicable"],
+                    "notes": "No external target applies.",
+                },
+                "source_ids": [],
+                "sources": [],
+                "evidence": [],
+                "limitations": [],
+                "uncertainty": "No external research was needed.",
+                "risk": "A later architecture decision must reevaluate the gate.",
+                "stop_conditions": ["The local entry point is located."],
+                "conflicts": [],
+                "conflict_resolution": "No material conflict identified.",
+                "fallback": "not-applicable",
+                "host_capability": {
+                    "capability": "managed-web-research",
+                    "status": "not-checked",
+                    "mode": "none",
+                    "read_only": True,
+                    "shell_network": False,
+                    "external_mutations": False,
+                    "verified": False,
+                    "verification_method": "not-applicable",
+                    "verification": "No managed web search was requested.",
+                },
+            },
             "response_contract": {
                 "schema_version": SUPPORTED_SCHEMA_VERSION,
                 "packet_type": "subagent-result",
@@ -1034,6 +1411,8 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
                 "evidence_fields": EVIDENCE_PACKET_EVIDENCE_FIELDS,
                 "fact_fields": EVIDENCE_PACKET_FACT_FIELDS,
                 "fact_confidence_values": EVIDENCE_PACKET_FACT_CONFIDENCE_VALUES,
+                "external_source_fields": REQUIRED_EXTERNAL_SOURCE_FIELDS,
+                "research_result_fields": RESEARCH_RESULT_FIELDS,
             },
             "execution_rules": {
                 "read_only": True,
@@ -1064,6 +1443,14 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
                 "generated micro task kind",
                 errors,
             )
+            if "external_research" in generated_micro:
+                errors.append(
+                    "generated local micro packet must omit the full external research gate"
+                )
+            if "web_research" in generated_micro:
+                errors.append(
+                    "generated local micro packet must omit absent web_research"
+                )
 
         direct_fixture = {
             "schema_version": SUPPORTED_SCHEMA_VERSION,
@@ -1088,10 +1475,331 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
                     "continuous_planner_judgment": False,
                 },
             },
+            "external_research": {
+                "decision": "not-required",
+                "reason": "The answer is already in the Planner context and no external design evidence is needed.",
+                "status": "not-required",
+                "mode": "none",
+                "decision_critical": False,
+                "architecture_relevant": False,
+                "evidence_bar": "not-applicable",
+                "target_applicability": {
+                    "target_versions": ["not-applicable"],
+                    "target_runtimes": ["not-applicable"],
+                    "notes": "No external target applies.",
+                },
+                "source_ids": [],
+                "sources": [],
+                "evidence": [],
+                "limitations": [],
+                "uncertainty": "No external research was needed.",
+                "risk": "A later architecture decision must reevaluate the gate.",
+                "stop_conditions": ["The Planner context is sufficient."],
+                "conflicts": [],
+                "conflict_resolution": "No material conflict identified.",
+                "fallback": "not-applicable",
+                "host_capability": {
+                    "capability": "managed-web-research",
+                    "status": "not-checked",
+                    "mode": "none",
+                    "read_only": True,
+                    "shell_network": False,
+                    "external_mutations": False,
+                    "verified": False,
+                    "verification_method": "not-applicable",
+                    "verification": "No managed web search was requested.",
+                },
+            },
         }
         direct_report = validate_direct_routing(direct_fixture, config_path)
         if not direct_report["valid"]:
             errors.extend(f"direct fixture: {error}" for error in direct_report["errors"])
+
+        pending_fixture = deepcopy(micro_fixture)
+        pending_fixture.update(
+            {
+                "plan_id": "pending-research-fixture",
+                "task_id": "pending-research",
+                "task_kind": "requirement-research",
+                "sources": [],
+                "external_research": _fixture_research_gate(
+                    decision="required",
+                    status="pending",
+                    mode="cached-indexed",
+                    fallback="task-evidence",
+                ),
+                "web_research": {
+                    "requested": True,
+                    "mode": "cached-indexed",
+                    "capability": "managed-web-research",
+                    "availability": "available",
+                    "fallback": "task-evidence",
+                    "reason": "Gather the exact external compatibility evidence.",
+                    "read_only": True,
+                    "shell_network": False,
+                    "external_mutations": False,
+                },
+            }
+        )
+        pending_report = validate_micro_task(pending_fixture, config_path)
+        if not pending_report["valid"]:
+            errors.extend(
+                f"pending research dispatch fixture: {error}"
+                for error in pending_report["errors"]
+            )
+        else:
+            pending_packet = build_micro_task_packet(
+                pending_fixture, pending_report["metrics"]
+            )
+            pending_rules = "\n".join(
+                pending_packet.get("execution_rules", {})
+                .get("external_research_rules", [])
+            )
+            for term in (
+                "When web_research.requested=true, execute only the exact authorized query/questions, mode, budget, and stop conditions.",
+                "URLs discovered by that exact managed query are in-scope evidence records and do not require per-result expansion approval",
+                "any additional query, domain, or scope requires an expansion request",
+                "Discovery grants no download, reuse, copying, write, or external-mutation authority",
+            ):
+                if term not in pending_rules:
+                    errors.append(f"generated pending micro packet is missing execution rule: {term}")
+
+        satisfied_sources = {
+            "src-upstream": _fixture_external_source(
+                "src-upstream", "authoritative-upstream"
+            ),
+            "src-implementation": _fixture_external_source(
+                "src-implementation", "maintained-implementation"
+            ),
+        }
+        satisfied_gate = _fixture_research_gate(
+            decision="required",
+            status="satisfied",
+            mode="direct-planner",
+            source_ids=sorted(satisfied_sources),
+        )
+        satisfied_errors: list[str] = []
+        validate_external_research(
+            satisfied_gate,
+            "external_research",
+            satisfied_errors,
+            source_map=satisfied_sources,
+        )
+        if satisfied_errors:
+            errors.extend(
+                f"satisfied research evidence fixture: {error}"
+                for error in satisfied_errors
+            )
+
+        blocked_gate = _fixture_research_gate(
+            decision="required", status="unavailable", mode="none", fallback="blocked"
+        )
+        blocked_errors: list[str] = []
+        validate_external_research(
+            blocked_gate, "external_research", blocked_errors, direct=True
+        )
+        if not blocked_errors:
+            errors.append("blocked required research fixture was accepted")
+
+        invalid_fallback_gate = _fixture_research_gate(
+            decision="recommended",
+            status="unavailable",
+            mode="none",
+            fallback="task-evidence",
+            decision_critical=False,
+        )
+        invalid_fallback_errors: list[str] = []
+        validate_external_research(
+            invalid_fallback_gate,
+            "external_research",
+            invalid_fallback_errors,
+            direct=True,
+        )
+        if not any("fallback" in error for error in invalid_fallback_errors):
+            errors.append("invalid recommended fallback fixture was accepted")
+
+        mode_mismatch_fixture = deepcopy(pending_fixture)
+        mode_mismatch_fixture["web_research"]["mode"] = "live"
+        mode_mismatch_report = validate_micro_task(mode_mismatch_fixture, config_path)
+        if not any("mode" in error for error in mode_mismatch_report["errors"]):
+            errors.append("research mode mismatch fixture was accepted")
+
+        local_source = {
+            "id": "src-local",
+            "uri": "src/main.py",
+            "selector": {"type": "symbol", "name": "main"},
+            "estimated_tokens": 80,
+            "purpose": "Local task source",
+            "source_kind": "local-code",
+        }
+        mixed_web_task = {
+            "id": "task-web",
+            "task_kind": "requirement-research",
+            "agent_role": "web-research-task",
+            "objective": "Find the external design evidence.",
+            "source_ids": [],
+            "dependencies": [],
+            "questions": ["Which maintained implementation matches the target?"],
+            "deliverable": "Cited external source records.",
+            "evidence_required": True,
+            "intentional_overlap": False,
+            "allowed_expansion": {"mode": "deny", "max_additional_tokens": 0},
+            "stop_conditions": ["The bounded query is answered."],
+            "web_research": pending_fixture["web_research"],
+        }
+        mixed_local_task = {
+            "id": "task-local",
+            "task_kind": "repository-read",
+            "agent_role": "local-task",
+            "objective": "Read the local entry point.",
+            "source_ids": ["src-local"],
+            "dependencies": [],
+            "questions": ["Where is main defined?"],
+            "deliverable": "One local fact.",
+            "evidence_required": True,
+            "intentional_overlap": False,
+            "allowed_expansion": {"mode": "deny", "max_additional_tokens": 0},
+            "stop_conditions": ["The local fact is located."],
+        }
+        mixed_plan = {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
+            "plan_id": "mixed-research-fixture",
+            "configuration": example_plan["configuration"],
+            "routing": example_plan["routing"],
+            "plan_task_authorization": example_plan["plan_task_authorization"],
+            "plan_task_policy": configured_policy,
+            "goal": "Gather local and external evidence.",
+            "mode": "lean",
+            "shared_context": {"facts": [], "constraints": [], "source_ids": []},
+            "sources": [local_source],
+            "external_research": pending_fixture["external_research"],
+            "tasks": [mixed_local_task, mixed_web_task],
+        }
+        local_packet = build_packet(
+            mixed_plan,
+            mixed_local_task,
+            {"src-local": local_source},
+            {"estimated_input_tokens": 400},
+        )
+        web_packet = build_packet(
+            mixed_plan,
+            mixed_web_task,
+            {"src-local": local_source},
+            {"estimated_input_tokens": 400},
+        )
+        if "external_research" in local_packet or "web_research" in local_packet:
+            errors.append("mixed local packet retained absent research payload")
+        if "external_research" not in web_packet or "web_research" not in web_packet:
+            errors.append("mixed research packet omitted requested research payload")
+        packet_rules = "\n".join(web_packet.get("execution_rules", []))
+        for term in (
+            "For non-web tasks, read only the exact assigned sources initially.",
+            "When web_research.requested=true, execute only the exact authorized query/questions, mode, budget, and stop conditions.",
+            "URLs discovered by that exact managed query are in-scope evidence records and do not require per-result expansion approval.",
+            "Any additional query, domain, or scope requires an expansion request before reading it.",
+            "Discovery grants no download, reuse, copying, write, or external-mutation authority.",
+        ):
+            if term not in packet_rules:
+                errors.append(f"generated research packet is missing execution rule: {term}")
+
+        local_result_packet = {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
+            "packet_type": "subagent-result",
+            "plan_id": mixed_plan["plan_id"],
+            "task_id": mixed_local_task["id"],
+            "task_kind": mixed_local_task["task_kind"],
+            "status": "complete",
+            "summary": "Local evidence was read.",
+            "findings": [],
+            "facts_for_parent": [],
+            "assumptions": [],
+            "unknowns": [],
+            "expansion_requests": [],
+            "expansions_used": [],
+            "external_sources": [],
+            "research_result": {
+                "status": "not-required",
+                "mode": "none",
+                "limitations": [],
+                "uncertainty": "No external research was needed for this local task.",
+                "conflicts": [],
+                "conflict_resolution": "No material conflict identified.",
+            },
+        }
+        local_packet_report = validate_evidence_packet(
+            local_result_packet, mixed_plan
+        )
+        if not local_packet_report["valid"]:
+            errors.extend(
+                f"mixed local Evidence Packet fixture: {error}"
+                for error in local_packet_report["errors"]
+            )
+
+        discovered_source = _fixture_external_source(
+            "discovered-upstream", "authoritative-upstream", packet=True
+        )
+        discovered_result_packet = {
+            "schema_version": SUPPORTED_SCHEMA_VERSION,
+            "packet_type": "subagent-result",
+            "plan_id": mixed_plan["plan_id"],
+            "task_id": mixed_web_task["id"],
+            "task_kind": mixed_web_task["task_kind"],
+            "status": "complete",
+            "summary": "A discovered upstream source was recorded.",
+            "findings": [
+                {
+                    "id": "finding-discovered",
+                    "claim": "The upstream source documents the target design.",
+                    "severity": "high",
+                    "confidence": "high",
+                    "evidence": [
+                        {
+                            "source_id": "discovered-upstream",
+                            "locator": "README.md#design",
+                            "note": "Discovered source locator.",
+                        }
+                    ],
+                    "recommendation": "Planner should compare this source with a maintained implementation.",
+                }
+            ],
+            "facts_for_parent": [
+                {
+                    "id": "fact-discovered",
+                    "statement": "The discovered source documents the target design.",
+                    "provenance": ["discovered-upstream"],
+                    "confidence": "confirmed",
+                }
+            ],
+            "assumptions": [],
+            "unknowns": [],
+            "expansion_requests": [],
+            "expansions_used": [],
+            "external_sources": [discovered_source],
+            "research_result": {
+                "status": "satisfied",
+                "mode": "cached-indexed",
+                "limitations": [],
+                "uncertainty": "The source is pinned and described.",
+                "conflicts": [],
+                "conflict_resolution": "No material conflict identified.",
+            },
+        }
+        discovered_report = validate_evidence_packet(
+            discovered_result_packet, mixed_plan
+        )
+        if not discovered_report["valid"]:
+            errors.extend(
+                f"discovered-source Evidence Packet fixture: {error}"
+                for error in discovered_report["errors"]
+            )
+
+        if any(
+            task.get("allowed_expansion", {}).get("max_additional_tokens") != 300
+            for task in example_plan["tasks"]
+        ):
+            errors.append("example research expansion allowance was not restored")
+        elif plan_report["metrics"]["worst_case_total_input_tokens"] >= PLAN_TASK_MAX_INPUT_TOKENS_PER_ROUND:
+            errors.append("example packet-size regression exceeds PLAN input ceiling")
 
     return {
         "valid": not errors,
@@ -1104,6 +1812,9 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             str(agent_path),
             str(implementer_path),
             str(adapter_contract_path),
+            str(skse_skill_path),
+            str(skse_build_path),
+            str(skse_runtime_path),
         ],
     }
 

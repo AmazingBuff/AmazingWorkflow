@@ -1,4 +1,4 @@
 interface:
   display_name: "Two-Phase Coding Workflow"
-  short_description: "Plan in the main task, delegate bounded PLAN tasks, then implement with one chosen worker."
-  default_prompt: "Use $lightweight-coding-workflow to keep PLAN and WORK as the only control phases, delegate bounded read-only PLAN tasks when context economics justify it, then delegate the approved implementation to the model I choose."
+  short_description: "Plan in the main task, gate external research conditionally, then implement with one chosen worker."
+  default_prompt: "Use $lightweight-coding-workflow to keep PLAN and WORK as the only control phases, record the conditional External Research Gate, route eligible read-only research through bounded PLAN tasks when justified, then delegate the approved implementation to the model I choose."

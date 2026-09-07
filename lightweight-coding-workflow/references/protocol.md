@@ -59,15 +59,19 @@ The adapter owns the host-specific representation and validation of the approved
 
 The Planner must not mark a contract `APPROVED` until the workflow revision, protocol digest, and adapter digest are populated and verified against the exact resources selected for that task.
 
-Workflow revision `0.7.0` uses Core protocol `0.7`, schema `2.0`, and the
-coordinated Adapter `0.7`. Text-resource digests use canonical UTF-8/LF text:
+Workflow revision `0.7.1` uses Core protocol `0.7`, schema `2.1`, and
+configuration revision `3`; adapter versions change only when their mapping or
+metadata changes. Text-resource digests use canonical UTF-8/LF text:
 decode UTF-8, normalize CRLF and lone CR to LF, re-encode UTF-8, then hash with
 SHA-256. Configuration, protocol, and adapter text use this representation;
 binary and generated packet artifacts retain raw-byte hashing. Existing
 approved `0.6.x` contracts remain immutable and continue only with their
-matching historical resources; they are not revalidated against `0.7.0` files.
-New `0.7.0` contracts require `workflow_revision`, `protocol_sha256`, and
-`adapter_sha256` before approval or dispatch.
+matching historical resources; they are not revalidated against current `0.7.1`
+files.
+New `0.7.1` contracts require `workflow_revision`, `protocol_sha256`, and
+`adapter_sha256` before approval or dispatch. Approved `0.7.0` contracts remain
+historical and are continued only with matching `0.7.0` Skill, schema,
+configuration, Core, and adapter resources.
 
 ### Revision rules
 
@@ -130,6 +134,57 @@ concurrent read-only tasks, at most 12,000 estimated input tokens per PLAN
 round, no complete parent transcript, no writes or external mutations, one
 user-visible dispatch notice, and no per-task approval while in policy.
 Exceeding it requires user approval or direct fallback.
+
+### PLAN External Research Gate
+
+Every non-trivial coding proposal carries an `external_research` gate with a
+`required`, `recommended`, or `not-required` decision, an explicit reason, a
+status, and a search mode. The gate records decision-critical and
+architecture-relevant flags, the evidence bar, source ids and citations,
+limitations, uncertainty, risk, stop conditions, conflicts, and the host's
+managed-web-research capability status.
+
+Research is required for external APIs/ABIs/frameworks, runtime or version
+compatibility, low-level hooks or integration patterns, new dependencies,
+license-sensitive reuse, and locally unsupported designs with likely mature
+prior art. Trivial/mechanical work, or a change fully determined by local code,
+tests, and canonical documentation, may be marked not-required. Required
+decision-critical research must be satisfied before approval. Unavailable,
+disabled, or insufficient required evidence is a `BLOCKED` PLAN outcome, not
+permission to invent a mature design. Recommended research can use an explicit
+uncertain fallback with a recorded limitation and risk.
+A `pending` gate may dispatch an eligible verified read-only research task with
+its exact query and budget, but that dispatch is not approval evidence. A
+decision-critical proposal or implementation contract still requires
+`satisfied` research. The task may return newly discovered external source
+records with complete provenance for Planner review; a local task in a mixed
+batch returns an empty `external_sources` array and `not-required`/`none`
+research result.
+For `web_research.requested=true`, only the exact authorized query/questions,
+mode, budget, and stop conditions are executable scope. URLs discovered by
+that managed query are in-scope evidence and need no per-result expansion
+approval; any additional query, domain, or scope requires an expansion request.
+Discovery grants no download, reuse, copying, write, or mutation authority.
+
+External source descriptors record a stable id, direct URL, source kind,
+repository/project, revision when available, retrieval date, license/reuse
+status, target-version/runtime applicability, relevant locator, confidence, and
+conflicts. The normal architecture bar is authoritative upstream evidence plus
+a maintained implementation, or an explicit reason why only one source exists.
+Cached/indexed search is the default for established patterns; live search is
+required when freshness, current release/branch, issue state, or compatibility
+may have changed. Stop at the evidence bar, after contradictions are
+resolved/disclosed, when marginal value falls below cost, or at the budget.
+
+Only read-only `requirement-research` and `dependency-check` PLAN tasks may
+receive the explicit managed web-search capability. It must distinguish managed
+search from shell networking and carry `shell_network=false`,
+`external_mutations=false`, and no download, remote execution, authentication,
+dependency changes, copying, or GitHub mutation. A host capability is not
+verified from documentation alone; the parent Planner may promote it only with
+a bounded live read-only forward test. Direct Planner search is the fallback.
+WORK does not perform scope-changing architecture research and returns to PLAN
+when missing external evidence would alter the approved contract.
 
 ## WORK dispatch envelope
 
@@ -362,7 +417,8 @@ The Planner may inspect the diff and rerun read-only checks, but may not edit pr
 Protocol `0.7` keeps the two-phase Core and single-WORK-writer invariant while
 making PLAN routing task-capability based. It adds the direct/micro/batch
 routing record, the minimal micro-task envelope, context-economics accounting,
-and the pre-authorized Codex PLAN policy. The optional adapter capability is
+the pre-authorized Codex PLAN policy, and the conditional External Research
+Gate with source provenance and managed-search boundaries. The optional adapter capability is
 still named `read_only_scout_dispatch` for metadata compatibility, but its
 semantics are task-scoped Evidence Task dispatch. A same-version adapter
 without that optional capability remains eligible for WORK and uses direct

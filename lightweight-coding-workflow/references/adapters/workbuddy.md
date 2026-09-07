@@ -28,6 +28,12 @@ This reference maps the [Host Adapter Contract](../adapter-contract.md) and [Cor
 
 This adapter does **not** declare `read_only_scout_dispatch`. WorkBuddy is therefore limited to **direct PLAN handling**. See [Optional capability: why it is not declared](#optional-capability-why-it-is-not-declared).
 
+It also does not declare `managed_web_research`. The PLAN capability check
+records managed search as unavailable on this host until a future adapter
+revision proves host-enforced read-only service access with a live forward
+test. The gate consequently uses direct Planner search, an explicit uncertain
+fallback, or `BLOCKED` and never shell networking.
+
 ## Compatibility
 
 | Item | Mapping |
