@@ -78,13 +78,26 @@
 // 对应头文件
 #include "my_class.h"
 
-// 同项目内部头文件
-#include "core/base.h"
-#include "utils/math.h"
+// 同目录下其他文件
+#include "other_class.h"
+
+// 同项目内部上一级头文件
+#include "render/core/base.h"
+#include "render/core/math.h"
+
+// 同项目内部上一级不同目录下头文件
+#include "render/util/cache/cache_type.h"
+#include "render/util/utl.h"
+
+// 同项目内部上上一级头文件
+#include "render/render_type.h"
 
 // 第三方库
 #include <Eigen/Eigen>
 #include <assimp/Importer.hpp>
+
+// 系统库
+#include <windows.h>
 
 // 标准库
 #include <algorithm>
@@ -94,6 +107,7 @@
 - 禁止使用 `../` 相对 include；始终从项目配置的 include 根路径引用。
 - 公共头能前向声明时不要 include 私有实现头或不必要的依赖。
 - 预编译头只包含标准库、平台宏和全局配置宏，不包含项目内部实现头。
+-  `pch.h` 这种预编译头由项目自动调配，不应加入 `.cpp` 的 include 文件当中。
 
 ### 命名空间
 
