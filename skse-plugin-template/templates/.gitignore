@@ -20,7 +20,7 @@ CMakeFiles/
 cmake_install.cmake
 compile_commands.json
 _deps/
-# 本机专用 preset（含个人路径），不提交
+# Machine-local preset (contains personal paths); do not commit
 /CMakeUserPresets.json
 
 # Compiled
