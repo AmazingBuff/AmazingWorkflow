@@ -1,0 +1,22 @@
+{
+  "description": "INI configuration and Setting singleton",
+  "requires": [],
+  "includes": [
+    "config/config.h"
+  ],
+  "ports": [
+    "simpleini"
+  ],
+  "packages": [
+    "simpleini"
+  ],
+  "link_libraries": [
+    "SimpleIni::SimpleIni"
+  ],
+  "on_load": [
+    "PLUGIN_NAMESPACE::Setting::instance().load();"
+  ],
+  "on_save": [
+    "PLUGIN_NAMESPACE::Setting::instance().save();"
+  ]
+}

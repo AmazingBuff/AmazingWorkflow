@@ -1,0 +1,7 @@
+{
+  "description": "Standalone hash helpers",
+  "requires": [],
+  "includes": [
+    "base/def.h"
+  ]
+}

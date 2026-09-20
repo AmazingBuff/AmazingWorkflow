@@ -65,6 +65,57 @@ Text-resource evidence uses the canonical UTF-8/LF digest representation
 documented by the Core; binary and generated packet artifacts retain raw-byte
 hashing.
 
+## Codex implementation economy
+
+Apply these rules in PLAN proposals, new implementation contracts, WORK, and
+review. They take precedence over generic defensive-programming and test-coverage
+defaults in the bundled language rules; they do not alter an already approved
+contract or remove explicit user requirements and mandatory repository checks.
+
+### Minimal defensive code
+
+- Trust established internal preconditions, types, and upstream guarantees.
+  Add a check only for a concrete failure reachable in the requested behavior,
+  or a required security, memory/lifetime, or ABI constraint.
+- Validate untrusted input once at its actual entry point, checking only what
+  the operation needs. A public function, module boundary, or layer transition
+  is not by itself a reason to add validation.
+- Do not add repeated null/type/range checks, speculative fallbacks, broad
+  exception catches, or chains of `Validate*` helpers. Prefer direct code and
+  existing error propagation; extract a validator only for real reuse or a
+  substantial domain rule.
+- Assertions, runtime-state checks, and compatibility guards need the same
+  concrete justification; their category is not a blanket exemption. Preserve
+  necessary existing safeguards and avoid unrelated cleanup.
+
+### One or two meaningful test cases
+
+- Budget 1–2 cases total per change, across authoring, selection, and manual
+  verification, not per file, function, layer, or test command. Reuse an existing
+  focused test when available. Parameterized rows count as separate cases.
+- Choose one representative observable behavior; use a second case only for
+  the bug regression or the most relevant failure/boundary condition. Do not
+  generate input matrices, exhaustive edge cases, trivial getter tests, or
+  tests that mirror implementation details or merely match source wording.
+- Documentation-only, mechanical, or other low-impact changes may need no new
+  behavioral tests. Use a focused inspection or existing validator instead.
+- Select the narrowest existing test target. Do not run the full suite,
+  platform/build matrix, benchmark, or repeated smoke tests by default. Run
+  required builds/static checks at the smallest applicable scope; do not use
+  those labels to hide additional behavioral test cases.
+- Exceed the budget only for an explicit user requirement, mandatory repository
+  check, or a demonstrated failure that 1–2 cases cannot resolve. State that
+  specific reason and use the smallest necessary extension. Hypothetical risk
+  or a general wish for more confidence is insufficient.
+- Stop once the selected checks pass. Rerun only affected checks after an edit
+  or to investigate a concrete failure. Report the actual scope and results;
+  do not imply comprehensive coverage.
+
+The Planner records the selected cases (or why none are needed) in Verification
+and passes this adapter's absolute path as an Applicable coding rules resource.
+The worker reads this section before implementation and applies the same budget
+to in-scope review repairs.
+
 ## Operation map
 
 | Capability | Operation | Codex mechanism | Failure mapping |

@@ -9,10 +9,13 @@ Before making any product-code change:
 3. Confirm that the contract status is APPROVED and note its task id and revision.
 4. Inspect repository instructions and the current worktree state.
 5. Compare existing changes with the contract baseline. If unapproved user changes overlap your write scope, return BLOCKED before editing them.
+6. Read the Codex adapter's "Codex implementation economy" section from the Applicable coding rules paths. For older contracts without that path, resolve references/adapters/codex.md beside the supplied protocol.md; preserve the older contract's explicit verification obligations.
 
 Treat the approved contract as the sole authority. Implement only its requirements and allowed paths. Preserve its non-goals, forbidden paths, constraints, dependency policy, destructive-action limits, and acceptance criteria.
 
 You may read files, edit approved code, and run implementation, formatting, build, static-analysis, test, and diagnostic tools. Stay within scope when repairing failures caused by this task.
+
+Keep implementation direct: trust internal preconditions, validate actual untrusted inputs once, and avoid speculative checks, repeated Validate helpers, and fallback layers. Follow the adapter's total budget of 1–2 meaningful test cases per change, reusing focused tests where possible. Do not expand to matrices or full suites without the adapter's concrete exception criteria. Stop after the selected checks pass; review repairs do not reset the budget.
 
 Do not:
 - ask the user questions or make product decisions;

@@ -1,0 +1,18 @@
+{
+  "description": "Embedded passthrough HLSL and ShaderManager",
+  "requires": [
+    "dx11"
+  ],
+  "includes": [
+    "render/shader_manager.h"
+  ],
+  "cmake_includes": [
+    "cmake/shaders.cmake"
+  ],
+  "generated_sources": [
+    "${GENERATED_SHADER_HEADER}"
+  ],
+  "on_data_loaded": [
+    "(void)PLUGIN_NAMESPACE::ShaderManager::instance().compile();"
+  ]
+}

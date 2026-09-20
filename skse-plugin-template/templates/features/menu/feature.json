@@ -1,0 +1,24 @@
+{
+  "description": "Optional SKSE-MCP settings page",
+  "requires": [
+    "config"
+  ],
+  "includes": [
+    "ui/ui_menu.h"
+  ],
+  "link_libraries": [
+    "SKSE-MCP::SKSE-MCP"
+  ],
+  "submodules": [
+    {
+      "url": "https://github.com/QTR-Modding/SKSE-MCP.git",
+      "path": "extern/SKSE-MCP"
+    }
+  ],
+  "on_data_loaded": [
+    "PLUGIN_NAMESPACE::Menu::register_menu();"
+  ],
+  "on_game_ready": [
+    "PLUGIN_NAMESPACE::Menu::register_menu();"
+  ]
+}

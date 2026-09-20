@@ -1,9 +1,12 @@
 {
   "name": "{{PROJECT_NAME_LOWER}}",
-  "version": "{{PROJECT_VERSION}}",
-  "license": "GPL-3.0-or-later",
+  "version": "{{PACKAGE_VERSION}}",
   "dependencies": [
-{{VCPKG_DEPENDENCIES}}
+    "fmt",
+    "spdlog",
+    "directxmath",
+    "rapidcsv",
+    "directxtk"
   ],
   "builtin-baseline": "{{VCPKG_BASELINE}}"
 }

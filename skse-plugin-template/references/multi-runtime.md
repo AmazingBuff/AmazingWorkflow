@@ -1,67 +1,18 @@
-# Runtime and rendering constraints
+# 需要引擎集成时才检查运行时
 
-SE/AE is the reference default. CLI selections se, ae, se-ae, vr, all, se-vr,
-ae-vr map to the corresponding ENABLE_SKYRIM_* options before CommonLib is
-added. VR requires initialized nested OpenVR content and matching SKSE and
-Address Library. The reference does not establish VR behavior for its renderer.
-Both the generator and CMake reject VR for present_hook/vtable_hook until a
-verified VR implementation replaces these examples.
+默认 CMake 提供 SE/AE/VR 开关，示例启用 SE/AE。这些开关和导出元数据不是跨运行时验证结果。
+先确定当前插件支持的实际版本，再检查选定 CommonLib、SKSE、Address Library 和相关布局。
 
-main.cpp defines metadata explicitly, using PluginVersionData, UsesAddressLibrary
-and UsesNoStructs like the reference. These are declarations to review for each
-actual plugin, not proof of struct/runtime independence. Query rejects null
-arguments and editor mode but does not certify a runtime matrix. Do not infer
-universal AE compatibility from metadata or a successful build.
+新增引擎调用优先使用 CommonLib 的已存在接口。表地址可重定位不代表虚表槽位和调用约定
+跨版本相同；不要把参考项目的槽位、偏移或注释直接当成另一个目标版本的证据。
 
-Engine addresses use CommonLib relocations and runtime-aware accessors. A table
-relocation does not prove a virtual slot: the optional Character Update example
-uses the flat header's 0xAD slot and void(Actor*, float); verify the executable
-ABI before enabling it in a release. Do not invent IDs or transplant slots to VR.
+按模块实际需求选择消息时机。需要游戏数据时再注册消息监听器；若新游戏和读档都应生效，
+应覆盖两条路径；注册和 hook 的重复调用按实际生命周期处理。参考只处理某个消息，不表示
+目标项目也必须遗漏其他消息。没有相关模块时，不生成空的 message_handler。
 
-## Lifecycle and input
+对配置共享、事件 sink 生命周期、游戏对象引用、渲染线程、设备切换和 COM 资源分别确定
+责任。不能以“与参考实现一致”代替审查，也不需要为了潜在未来功能提前实现整套机制。
 
-Load initializes logging/SKSE and Setting, retaining the source project's
-REL::Module::reset workaround pending review on dependency upgrades. DataLoaded
-installs optional event/vtable modules. NewGame and PostLoadGame install renderer
-and input; SaveGame persists settings. Renderer/input installation is idempotent.
-If the renderer is still absent on a game-ready message, it can retry on the
-next such message; this skeleton does not add an asynchronous retry loop.
-
-Config stores Windows virtual-key codes. InputManager converts with
-MapVirtualKeyA(..., MAPVK_VK_TO_VSC), compares keyboard ButtonEvent codes and
-acts only on IsDown. Extra UI/text input, extended keys, mouse, gamepad and VR
-controller support require project-specific work. Do not claim they are covered
-by the default keyboard binding. Static event sinks have process lifetime.
-
-## Renderer pattern
-
-Renderer is the public facade. A private OverlayDirector owns rendering state
-and serialization. PresentHook is a singleton with its callback and original
-Present function as members. It patches COM slot 8 from the real swap chain
-using REL::Relocation::write_vfunc, publishes callback/original before patching,
-guards repeat installation, skips DXGI_PRESENT_TEST and preserves original
-Present after the callback even if plugin C++ code throws.
-
-Use REX::W32 types end-to-end as in the reference. The generated renderer obtains
-the actual device/context and calls a draw extension point; it does not create
-DirectXTK effects, change pipeline state, retain back buffers or draw gameplay
-objects by default. New passes should follow the reference's dx11 helpers:
-
-1. Construct D3D11StateCapture with a valid context and call capture once.
-2. Set only the pipeline slots your pass needs; submit its rendering.
-3. Call restore on every exit, including exceptions, before the capture object
-   releases its saved COM references. The helper destructor releases references;
-   it does not automatically restore state.
-
-The reused helper captures a specific subset (one RTV, selected IA/VS/PS slots,
-blend/depth/rasterizer, viewport/scissor). It is not a universal D3D11 state
-snapshot. Extend it if new passes touch other slots or GS/HS/DS/UAV state, and
-check class-instance array capacity when changing shader use. Do not call
-capture twice on one instance without releasing the previous references.
-
-compile_shader returns an owned blob; release it and created device resources
-at their lifecycle boundaries. Avoid retained swap-chain textures/views without
-a complete resize strategy. Microsoft's [ResizeBuffers contract](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-resizebuffers)
-requires direct and indirect back-buffer references to be released before resize.
-Hook/device replacement, interaction with other overlays and actual render-thread
-ownership still need live-game tests; the skeleton is not hot-unload support.
+最小模板保留参考的入口/元数据形式；添加具体功能后，重新核对 UsesNoStructs 等声明以及
+REL::Module::reset 这类版本相关 workaround 是否适用于所选依赖。编译成功只证明构建，
+实际回调、hook 和游戏行为仍需在声称支持的运行时验证。

@@ -1,0 +1,18 @@
+{
+  "description": "Keyboard hotkey event sink",
+  "requires": [
+    "config"
+  ],
+  "includes": [
+    "input/input.h"
+  ],
+  "link_libraries": [
+    "user32"
+  ],
+  "on_data_loaded": [
+    "PLUGIN_NAMESPACE::InputManager::install();"
+  ],
+  "on_game_ready": [
+    "PLUGIN_NAMESPACE::InputManager::install();"
+  ]
+}

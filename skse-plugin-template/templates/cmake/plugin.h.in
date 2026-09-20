@@ -1,6 +1,5 @@
 #pragma once
 
-#include <REL/Version.h>
 #include <string_view>
 
 #define PLUGIN_NAMESPACE @PROJECT_NAMESPACE@
@@ -9,12 +8,13 @@
 
 namespace Plugin
 {
-    inline constexpr REL::Version Plugin_Version
-    {
-        @PROJECT_VERSION_MAJOR@u,
-        @PROJECT_VERSION_MINOR@u,
-        @PROJECT_VERSION_PATCH@u,
-    };
-    inline constexpr std::string_view Plugin_Name{ "@PROJECT_NAME@" };
-    inline constexpr std::string_view Plugin_Author{ "@PROJECT_AUTHOR@" };
+	inline constexpr REL::Version Plugin_Version
+	{
+		@PROJECT_VERSION_MAJOR@u,
+		@PROJECT_VERSION_MINOR@u,
+		@PROJECT_VERSION_PATCH@u,
+	};
+
+	inline constexpr std::string_view Plugin_Name = "@PROJECT_NAME@";
+	inline constexpr std::string_view Plugin_Author = "@PROJECT_AUTHOR@";
 }

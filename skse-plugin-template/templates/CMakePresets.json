@@ -2,6 +2,12 @@
   "configurePresets": [
     {
       "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": {
+          "type": "STRING",
+          "value": "Release"
+        }
+      },
       "errors": {
         "deprecated": true
       },
@@ -41,19 +47,8 @@
         "strategy": "set",
         "value": "x64"
       },
-      "generator": "Visual Studio 17 2022",
-      "inherits": [
-        "cmake-dev",
-        "vcpkg",
-        "windows"
-      ],
-      "name": "Release",
-      "toolset": "v143"
-    },
-    {
-      "architecture": {
-        "strategy": "set",
-        "value": "x64"
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "/EHsc /MP /W4 /WX"
       },
       "generator": "Visual Studio 17 2022",
       "inherits": [
@@ -61,26 +56,9 @@
         "vcpkg",
         "windows"
       ],
-      "name": "Debug",
-      "toolset": "v143"
+      "name": "Release",
+      "toolset": "v143,version=14.44.35207"
     }
   ],
-  "version": 3,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 22,
-    "patch": 0
-  },
-  "buildPresets": [
-    {
-      "name": "Release",
-      "configurePreset": "Release",
-      "configuration": "Release"
-    },
-    {
-      "name": "Debug",
-      "configurePreset": "Debug",
-      "configuration": "Debug"
-    }
-  ]
+  "version": 3
 }

@@ -1,0 +1,9 @@
+{
+  "description": "REX CommonStates and D3D state/shader helpers",
+  "requires": [],
+  "link_libraries": [
+    "d3d11",
+    "dxgi",
+    "d3dcompiler"
+  ]
+}

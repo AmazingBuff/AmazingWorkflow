@@ -1,0 +1,8 @@
+{
+  "description": "REX swap-chain Present hook",
+  "requires": [],
+  "link_libraries": [
+    "d3d11",
+    "dxgi"
+  ]
+}

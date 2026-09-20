@@ -217,6 +217,12 @@ default to `none`.
 
 ## Planning and approval
 
+For Codex, apply [Codex implementation economy](references/adapters/codex.md#codex-implementation-economy)
+when planning, implementing, and reviewing: minimize defensive checks and
+`Validate*` helpers, and select 1–2 meaningful test cases total per change.
+This host-specific policy overrides generic bundled coverage defaults. Include
+the adapter path in Applicable coding rules so the worker receives the policy.
+
 Separate the request into objective, requirements, constraints, non-goals,
 acceptance criteria, risks, and reversible assumptions. The proposal includes
 the routing decision and economics, task policy, expected paths, applicable

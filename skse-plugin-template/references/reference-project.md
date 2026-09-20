@@ -1,62 +1,20 @@
-# Reference-to-template mapping
+# 如何阅读参考项目
 
-Source: Highlight-Lootable-Corpses, project HEAD
-01e317ceb1e4c96bb6433b767e4baac2e524b1bf, inspected 2026-09-20.
-CommonLib source: d13d10a0ccb4945870eb841bf1ad8a6cf5ed84dd, version 8.0.1.
-These identify the local evidence, not a claim about the latest upstream release.
+参考工程：Highlight-Lootable-Corpses。其用途是提供已存在的组织方式和具体实现案例，
+不是目标项目的模块清单、不可修改的规范或逐文件同步源。
 
-The templates directory was rebuilt from empty, not incrementally converted
-from its previous features/src-CMake/esp_renderer architecture.
+| 想解决的问题 | 阅读入口 | 提取的内容 |
+| --- | --- | --- |
+| 项目和元数据如何组织 | 根 CMakeLists、CMakePresets、cmake/plugin.h.in、main.cpp、pch.h | 构建顺序、生成文件位置、入口和命名空间约定。 |
+| INI 如何分离职责 | src/config/ 及其调用方 | 配置模块接口和读写流程，不是原配置字段全集。 |
+| 输入如何接入游戏 | src/input/ | 事件订阅和码值转换，按需求保留设备和触发行为。 |
+| 菜单如何连接设置 | src/ui/ui_menu.* 与 extern/SKSE-MCP | 当且仅当需要该 UI 方案时参考。 |
+| 图形代码如何拆分 | src/render/、dx11/、shader_manager.*、cmake/embed_shaders.cmake | 根据实际渲染规模选用层次、状态工具和生成流程。 |
+| 某个工具是否可复用 | base/def.h、render_util.*、pulse_timer.* | 逐项检查消费者和依赖，选择有用途的函数/类。 |
 
-| Source | New template |
-| --- | --- |
-| Root CMakeLists.txt | Root-only SHARED target, recursive src collection, configured Plugin.h/RC, CommonLib source dependency, scoped compiler/link settings. |
-| CMakePresets.json | cmake-dev/vcpkg/windows inheritance, shared build folder, VS2022 x64, Release and Debug configure/build presets. |
-| cmake/Plugin.h.in | Same namespace macros and Plugin metadata names, parameterized project and author. |
-| src/main.cpp | Explicit Load/Query/Version exports, logger setup and lifecycle dispatch. |
-| src/pch.h | RE/REL/SKSE/REX includes, standard literals, logger alias, DLLEXPORT and Plugin.h. |
-| src/config/config.* | Config + Setting singleton, get_config/load/save, generic Enabled and VK Hotkey fields. |
-| src/input/input.* | InputManager with process-lifetime InputHandler event sink, VK-to-scan conversion. |
-| src/render/renderer.* | Renderer facade + private OverlayDirector singleton using REX device/context. |
-| src/render/present_hook.* | PresentHook singleton, callback/original members, real swap-chain vtable slot 8. |
-| src/render/dx11/d3d11_util.* | Reused compile_shader and D3D11StateCapture with original attribution. |
-| cmake/packaging.cmake, LICENSE, .gitignore | Reference packaging pattern, full GPL text and ignore conventions. |
+不默认引入搜索、过滤、QuickLoot、轮廓/icon pass，也不默认引入上述“通用”模块。
+它们只有在解决目标项目的具体需求时才进入目标项目。
 
-Only scaffolding-specific adjustments are made: validated inputs, project
-placeholders, optional modules, configuration defaults, checked registration,
-idempotent hooks, NewGame coverage, safe INI access, DLL resource type, working
-install rules and portable compiler selection. The exact 14.44.35207 compiler
-patch remains a local toolchain choice; dependency compatibility still matters.
-
-Setting::get_config returns a locked copy rather than a shared mutable reference,
-with toggle() for input updates. Hotkey values remain VK codes like the source.
-Renderer intentionally performs no draw until a product pass is added. The
-reference's fixed corpse count, search/filter/UI, QuickLoot, SKSE-MCP, geometry,
-icon/mask shaders and cached back-buffer implementation are not generic features.
-Optional HitEvents/Hooks follow the class style but are extension examples, not
-claims that the reference project contained those exact modules.
-
-The new default does not contain templates/features, src/CMakeLists.txt,
-plugin_version.h.in, esp_renderer, add_commonlibsse_plugin, DirectXTK BasicEffect
-or a generated discovery metadata source file. Do not reintroduce that old
-architecture when maintaining this skill.
-
-Preserve original attribution in the reused D3D utility and the full GPL text.
-Plugin author metadata is a generator parameter. Inspect the pinned CommonLib
-COPYING.txt/EXCEPTIONS.md when distributing a linked DLL.
-
-## Rebuild verification
-
-On 2026-09-20, seven generator regression groups passed, including all 224 raw
-feature/runtime combinations and a check that every file in the new templates
-tree is consumed. Skill validation and Release/Debug preset listing passed.
-An all-feature SE/AE scaffold configured against the real CommonLib source and
-all its new plugin sources compiled/linked in Release with MSVC 19.44.35228 and
-Windows SDK 10.0.26100.0. This run reused the matching CommonLib static library
-compiled from that same source/runtime/toolset in the earlier verification and
-the installed vcpkg cache; it did not rebuild or freshly acquire dependencies.
-
-The rebuilt DLL has exactly Load, Query and Version SKSE exports and a 1.0.0.0
-version resource. Main/symbols ZIP contents were inspected. MSVC reports the
-reference's benign /Ob2-to-/Ob3 option override. Debug/VR compilation and live
-Skyrim behavior remain unverified; do not infer them from this Release result.
+旧版本 skill 的“固定通用骨架”“22 个文件必须相同”“哈希一致才算完成”约束已经移除。
+check_reference.py、reference_model.py、reference.json 不再属于此 skill。维护标准改为：
+当前功能是否有合理文件布局、CMake 是否只配置实际需要的内容、复用代码是否完成依赖裁剪与适配。

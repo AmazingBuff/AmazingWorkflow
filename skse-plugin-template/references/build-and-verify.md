@@ -1,92 +1,74 @@
-# Build and verification
+# CMake：沿用组织方式，按功能配置内容
 
-## Build contract
+## 根文件顺序
 
-Use Windows x64, Visual Studio 2022/v143, Windows SDK, CMake 3.22+, C++23 and
-vcpkg. The root CMake owns the single plugin target. src has no CMakeLists.
-Sources use GLOB_RECURSE CONFIGURE_DEPENDS to follow the reference's source-tree
-pattern while noticing added modules. Generated Plugin.h is in build/src and
-version.rc is in build; the resource type is DLL.
+参考 Highlight-Lootable-Corpses 的根 CMake 编排：
 
-Use add_library(SHARED), not add_commonlibsse_plugin. main.cpp already owns all
-three SKSE exports; introducing the helper duplicates discovery exports.
-Metadata stays sourced from project version/name/author through Plugin.h.
+1. project 及版本、命名空间、作者、运行时选项。
+2. cmake 模块路径；需要的生成材料和源文件集合。
+3. configure_file 生成 build/src/plugin.h 和版本资源。
+4. add_library(SHARED)，设置 C++23、编译/链接参数、包含目录。
+5. 添加实际依赖、find_package、target_link_libraries、PCH。
+
+默认保留根目录统一管理 target 的模式，不需要 src/CMakeLists.txt。
+main.cpp 已定义 Load/Query/Version 导出，不能同时再用会生成同名导出的 helper。
+
+模板沿用参考项目的 Release configure preset 和 build/ 目录：
 
 ```powershell
-git init
-git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git extern/CommonLibSSE
-git submodule update --init --recursive
 cmake --preset Release
-cmake --build --preset Release
-cmake --preset Debug
-cmake --build --preset Debug
-cpack -C Release --config build/CPackConfig.cmake
+cmake --build build --config Release
 ```
 
-Set VCPKG_ROOT first. The presets inherit cmake-dev, vcpkg and windows, matching
-the reference. Both configurations share build/, with explicit configuration
-in build presets (CMAKE_BUILD_TYPE does not select a VS configuration).
-The DLL is build/Release/<name>.dll. CPack creates a main ZIP with
-SKSE/Plugins/<name>.dll, README and LICENSE, and a separate PDB ZIP.
+没有 buildPresets 时不能使用 --build --preset Release。Visual Studio 是多配置生成器，
+实际构建配置由 --config 指定。原参考环境使用 MSVC 14.44.35207、x64-windows-static-md；
+模板保留该环境示例。移植到别的机器时，统一调整 preset 和 target 的工具集选择，匹配
+依赖的 CRT/STL，不把精确补丁版本当成所有 SKSE 项目的普遍要求。
 
-The root prefers extern/CommonLibSSE, with COMMONLIBSSE_SOURCE_DIR as an optional
-local source override. Default generation is offline and doesn't initialize Git.
---git-init is local-only; --add-commonlib-submodule performs the acquisition
-above except the recursive update. Commit .gitmodules and the actual gitlink.
-If acquisition fails after files are generated, inspect them rather than
-rerunning into the now nonempty directory.
+## 依赖分层
 
-## Dependencies and compiler
+默认 target 只直接依赖 CommonLib、fmt、spdlog。vcpkg 中 DirectXMath、DirectXTK、rapidcsv
+用于当前 CommonLib 构建，不能仅因第一方没有调用就随意删除。反过来，参考工程的
+SimpleIni、SKSE-MCP 等也不能在没有功能需求时全部加入。
 
-Default manifest constraints match the inspected CommonLib 8.0.1 manifest at
-d13d10a0ccb4945870eb841bf1ad8a6cf5ed84dd, baseline
-ee12231b20c95013c6638d845d04c91559a1d1ff. Root vcpkg installs dependencies;
-the embedded subdirectory manifest is not recursively installed. The reference
-plugin's older reduced manifest is insufficient as the library's dependency
-authority. Compare manifests when acquiring a newer ng revision.
+每次增加功能，同时检查：根 manifest 中是否需要新增 port、CMake 是否需要 find_package
+或 add_subdirectory、哪个 target 应链接它、运行时是否还有用户需安装的插件。
 
-Match x64-windows-static-md with /MD Release or /MDd Debug. Match MSVC toolsets
-of plugin and cached libraries. The source project's exact compiler patch
-pin is a local workaround, not a mandatory installed version for all users.
-Set a local user preset toolset if needed and rebuild mismatched dependencies.
-Never hide an unresolved __std_* symbol mismatch by changing warnings.
+| 功能 | 必要增量示例 |
+| --- | --- |
+| INI | 使用 SimpleIni 时，manifest 增加 simpleini；find_package(simpleini CONFIG REQUIRED)；目标链接 SimpleIni::SimpleIni。 |
+| MCP 菜单 | 只有选择此 UI 方案时，新增 extern/SKSE-MCP 子模块、add_subdirectory 和 SKSE-MCP::SKSE-MCP 链接。 |
+| 自定义 D3D 渲染 | 根据实际 API 增加 d3d11/dxgi；运行时编译 HLSL 才需要 d3dcompiler。 |
+| 纯游戏事件 | 通常复用 CommonLib 即可，不需要 UI 或渲染依赖。 |
 
-CommonLib may fetch patch-safety sources or prebuilt dependencies while
-configuring. An offline generator does not guarantee an offline build. Use
-cached ports and explicit FetchContent source overrides for offline checks.
-Only directly link feature libraries as needed (SimpleIni, user32,
-d3d11/dxgi/d3dcompiler). CommonLib may independently require DirectXTK.
+不能仅在 CMake 链接库却遗漏 vcpkg/submodule，也不能只复制 manifest 而没有实际消费者。
+新依赖版本按选定 CommonLib/工具链验证；基线是项目选择，不是必须照抄的业务属性。
 
-COPY_OUTPUT defaults OFF. Explicitly enabling it requires
-COMPILED_PLUGINS_PATH to a mod Data root; SKSE/Plugins is appended. Build-only
-work does not request overwriting a live game installation.
+## 源文件与 shader
 
-## Verify
+模板沿用参考的 GLOB_RECURSE；新增源文件后重新 configure。若目标项目需要自动感知新增文件，
+可以有意识地采用 CONFIGURE_DEPENDS 或显式清单，说明其行为，保持一种清晰策略。
 
-```powershell
-python scripts/test_scaffold.py
-python <skill-creator-root>/scripts/quick_validate.py <skill-directory>
-```
+只有需要自定义 shader 时才引入参考的 cmake/embed_shaders.cmake。将真正使用的 HLSL 放在
+src/render/shaders，显式列出“文件:符号名”，输出到 build/src/render/shader_sources.h；
+custom command 的 DEPENDS 应包含 HLSL 和生成脚本，生成头加入插件 target。
+检查消费者的 include 和构建依赖，确认 shader 修改会触发生成及相关编译。没有 shader 时，
+不要保留空映射、生成命令或 ShaderManager。
 
-Generate a minimal (--features none), default, and all-feature project. Check
-the template/source tree, selected module dependencies and valid JSON. List
-configure/build presets. Configure against real CommonLib, build Release and
-Debug where available, inspect one copy of each SKSE export and the RC version,
-and inspect ZIP entries. State whether libraries were reused from a matching
-cache or freshly built; neither proves a fresh vcpkg install succeeded.
+## 发布和验证
 
-For runtime claims verify Load, DataLoaded, NewGame, repeated save loads,
-SaveGame INI persistence, keyboard repeats/menus and rendering in each claimed
-executable. Compilation is not live-game evidence.
+packaging.cmake 只是参考的 CPack 组织示例，当前最小模板没有插件 install 规则。
+用户要求发布包时再定义 DLL、配置、资源、符号的安装布局并检查 ZIP；不要声称空配置
+已经产生可安装 mod 包。COPY_OUTPUT、部署脚本和本机路径也只在有需求时加入。
 
-## Migrate from the previous skill output
+验证范围跟随变更：默认最小插件应配置、编译、链接并检查导出和生成元数据；新增配置
+检查默认值/非法值/读写；新增输入或 hook 需要实际游戏验证；新增 shader 检查依赖重建与
+编译入口。复用本地依赖缓存时明确记录，不等同于全新依赖安装成功。
 
-This is a replacement architecture, not a source-compatible template update.
-Move target construction to root; remove src/CMakeLists and helper-generated
-metadata; replace plugin_version.h.in with Plugin.h.in and update callers.
-Replace namespace free functions with Setting/InputManager/Renderer/PresentHook
-module APIs. Use Release/Debug presets and the root build output location.
-Previous revision scan-code INIs require explicit migration back to VK values
-(F7 65 becomes 118); already-reference-compatible VK files need no migration.
-Do not apply both changes to the same file. Preserve existing user projects
-until their callers and build integration have been reviewed.
+## 使用 feature 的构建接入
+
+`--features` 通过各包的 feature.json 将上述增量接入根 CMake，而不是复制一份完整根配置。
+未选择 feature 时，条件占位块被移除，基础模板不添加对应源码和依赖。
+shaders 使用 include(cmake/shaders.cmake) 声明生成头，该头加入根 target；menu 单独添加
+SKSE-MCP；config 单独添加 SimpleIni。依赖 feature 自动按先后顺序展开并去重。
+不要只手动复制 feature 源码而忽略这些构建步骤。

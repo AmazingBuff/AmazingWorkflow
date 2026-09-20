@@ -1,0 +1,15 @@
+{
+  "description": "Renderer facade and explicit drawing extension point",
+  "requires": [
+    "present_hook"
+  ],
+  "includes": [
+    "render/renderer.h"
+  ],
+  "on_data_loaded": [
+    "PLUGIN_NAMESPACE::Renderer::install();"
+  ],
+  "on_game_ready": [
+    "PLUGIN_NAMESPACE::Renderer::install();"
+  ]
+}
