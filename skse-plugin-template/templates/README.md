@@ -2,72 +2,58 @@
 
 {{DESCRIPTION}}
 
-This is version {{PROJECT_VERSION}} of a C++23 SKSE plugin generated for runtime
-selection `{{RUNTIME_SELECTION}}` with features `{{FEATURE_SELECTION}}` and
-CommonLibSSE-NG branch `ng`.
+Version {{PROJECT_VERSION}}. Runtime selection: {{RUNTIME_SELECTION}}.
+Modules: {{FEATURE_SELECTION}}. Project namespace: {{PROJECT_NAMESPACE}}.
 
-First-party C++ is rooted at namespace `{{PROJECT_NAMESPACE}}`; feature modules
-use lowercase namespaces such as `config`, `input`, and `esp_renderer`. The
-global `SKSEPlugin_Load` export and framework override names remain external
-ABI exceptions.
-
-## Requirements
-
-- Windows x64 and Visual Studio 2022 with Desktop development with C++.
-- CMake 3.25 or newer.
-- Git and vcpkg with `VCPKG_ROOT` set.
-- The matching SKSE runtime and Address Library installation for SE, AE, or VR.
-
-## Add CommonLibSSE-NG
-
-The scaffold does not invent `.gitmodules` and performs no network operation by
-default. From this project directory, initialize the real submodule explicitly:
-
-```powershell
-git init
-git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git ext/CommonLibSSE
-git submodule update --init --recursive
-```
-
-Commit both the generated `.gitmodules` file and the
-`ext/CommonLibSSE` gitlink. A local checkout may instead be supplied through
-the `COMMONLIBSSE_SOURCE_DIR` CMake cache variable or environment variable.
+This C++23 SKSE scaffold follows Highlight-Lootable-Corpses: one root CMake
+target, cmake/Plugin.h.in, PLUGIN_NAMESPACE macros, manual Load/Query/Version
+exports, class-based modules, and REX::W32 rendering interfaces.
 
 ## Build
 
+Use Windows x64, VS2022 C++, Windows SDK, CMake 3.22+ and vcpkg.
+Set VCPKG_ROOT. Configure/build presets use the reference's Release/Debug names
+and shared build folder; select configuration explicitly for Visual Studio.
+
 ```powershell
-cmake --preset "msvc debug"
-cmake --build --preset "msvc debug"
-cmake --preset "msvc release"
-cmake --build --preset "msvc release"
-cpack --config "build/msvc release/CPackConfig.cmake"
+git init
+git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git extern/CommonLibSSE
+git submodule update --init --recursive
+cmake --preset Release
+cmake --build --preset Release
+cpack -C Release --config build/CPackConfig.cmake
 ```
 
-The Debug and Release configure/build presets inherit a hidden Visual Studio
-2022 x64 base. Each build preset links to its same-named configure preset and
-selects the corresponding configuration. The release DLL is produced below
-`build/msvc release/src/Release/`. Set `COMPILED_PLUGINS_PATH` and configure
-with `-DCOPY_OUTPUT=ON` only when an explicit local deployment copy is wanted.
+For Debug use the Debug presets. Commit the real CommonLib gitlink and
+.gitmodules. Instead of a submodule you can set COMMONLIBSSE_SOURCE_DIR to
+an existing checkout. Dependency defaults match CommonLib 8.0.1 at
+d13d10a0ccb4945870eb841bf1ad8a6cf5ed84dd; compare dependencies when updating ng.
+The main ZIP contains SKSE/Plugins/{{PROJECT_NAME}}.dll, README and LICENSE.
+The separate symbols ZIP contains its PDB. DLL output is build/Release/.
+COPY_OUTPUT defaults OFF; to enable it set COMPILED_PLUGINS_PATH to a mod Data
+root (the build appends SKSE/Plugins). Match compiler and vcpkg CRT/toolset.
 
-CommonLibSSE-NG and vcpkg may acquire their own build dependencies during a real
-configure. This repository pins the vcpkg baseline that matched CommonLibSSE-NG
-v6.7.0 on 2026-08-25. Updating CommonLib requires a coordinated review of its
-`vcpkg.json`, this project's baseline, dependency versions, runtime options, and
-license obligations.
+## Runtime
 
-## Installation
+Install the DLL under Data/SKSE/Plugins along with matching SKSE/Address Library.
+Logs use the standard Skyrim documents SKSE directory.
+With config selected, the INI is Data/SKSE/Plugins/{{PROJECT_NAME}}.
 
-Copy `{{PROJECT_NAME}}.dll` to `Data\SKSE\Plugins\`. The plugin log is written
-under the active Skyrim documents directory as `SKSE\{{PROJECT_NAME}}.log`.
+Hotkey is a Windows virtual-key code like the reference (118 / 0x76 = F7),
+converted to a keyboard scan code by InputManager. Zero disables it. Settings
+load at plugin Load and save on kSaveGame. Renderer/InputManager install on
+NewGame/PostLoadGame; hit/vtable modules install at DataLoaded.
+The render callback is a deliberate extension point, with no visible drawing
+until project-specific passes are added. D3D11StateCapture/compile_shader are
+reused from the reference; capture/restore the states each new pass changes.
+No corpse search, QuickLoot, MCP, menu assets or product shaders are generated.
+
+VR is explicit and the flat Present/vtable examples reject VR. Verify ABI,
+metadata declarations and game behavior in every runtime before distribution.
 
 ## License
 
-Copyright is retained by {{AUTHOR}}. This generated project defaults to
-GPL-3.0-or-later; see [LICENSE](LICENSE).
-
-CommonLibSSE-NG is a separate dependency distributed under
-GPL-3.0-or-later with its own Modding Exception and GPL-3.0 Linking Exception
-(with Corresponding Source). Those upstream exceptions are not relicensed,
-copied, or altered by this project. A plugin statically linked with
-CommonLibSSE-NG must remain GPL-3.0-or-later or otherwise GPL-compatible and
-must satisfy the upstream corresponding-source terms.
+Generated project code is GPL-3.0-or-later; see LICENSE. The renderer utility
+retains its original AmazingBuff attribution from Highlight-Lootable-Corpses.
+New plugin metadata credits {{AUTHOR}}. CommonLib keeps its own GPL and exception
+terms; inspect the pinned dependency's COPYING.txt and EXCEPTIONS.md.

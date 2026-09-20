@@ -1,6 +1,12 @@
 # Build output
 /build
 
+# Agent
+.dsh/
+.zcode/
+.codex/
+.lcw/
+
 # IDE
 /.vs/
 /.vscode/
@@ -29,3 +35,5 @@ _deps/
 
 # Logs
 *.log
+
+/install/

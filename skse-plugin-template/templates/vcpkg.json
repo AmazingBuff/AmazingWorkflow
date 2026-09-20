@@ -1,6 +1,7 @@
 {
   "name": "{{PROJECT_NAME_LOWER}}",
   "version": "{{PROJECT_VERSION}}",
+  "license": "GPL-3.0-or-later",
   "dependencies": [
 {{VCPKG_DEPENDENCIES}}
   ],

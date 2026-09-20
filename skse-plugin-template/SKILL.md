@@ -1,170 +1,120 @@
 ---
 name: skse-plugin-template
-description: Use only when the active host Skill catalog reports lightweight-coding-workflow enabled and discoverable; requires its canonical rules to scaffold or maintain a C++23 Skyrim SKSE plugin for SE, AE, or VR.
+description: Create or maintain C++23 SKSE plugins following the Highlight-Lootable-Corpses project pattern, including root CMake, Plugin.h metadata macros, class-based modules, INI settings, input events and REX D3D11 hooks.
 ---
 
 # SKSE Plugin Template
 
-This Skill generates one CommonLibSSE-NG plugin project. It is not
-standalone: it requires the `lightweight-coding-workflow` skill's coding-rule
-authority.
+This template is rebuilt from the structure of Highlight-Lootable-Corpses.
+Use that project's architectural pattern, rather than introducing a separate
+generic CommonLib helper-based scaffold. Read
+[reference-project.md](references/reference-project.md) for the source mapping.
 
-**Presence gate**: before doing anything else, ask the active host Skill
-catalog whether `lightweight-coding-workflow` is enabled and discoverable. If
-catalog metadata is unavailable, inspect loaded Skill metadata, then host-native
-roots including `$CODEX_HOME/skills/`, `~/.codex/skills/`, `~/.zcode/skills/`,
-`~/.agents/skills/`, `<project>/.zcode/skills/`, and
-`<project>/.agents/skills/`. Filesystem presence alone is insufficient: require
-both enabled and discoverable status. If that status is unavailable, stop and
-report that the required coding-rule authority is missing; do not scaffold with
-a local rule copy, fallback, or synthesized rules.
+## Project pattern
 
-Once located, use the canonical rule documents **within that skill's
-directory**:
+The template tree mirrors a project directly:
 
-- `[lightweight-coding-workflow root]/assets/coding-rules/small-project-cpp-rules/SKILL.md` (C++ rule index)
-- `[lightweight-coding-workflow root]/assets/coding-rules/small-project-code-contract/SKILL.md` (shared code contract)
-- `[lightweight-coding-workflow root]/assets/coding-rules/manifest.json` (hash inventory)
+```text
+templates/
+  CMakeLists.txt
+  CMakePresets.json
+  vcpkg.json
+  LICENSE
+  README.md
+  .gitignore
+  cmake/
+    Plugin.h.in
+    version.rc.in
+    packaging.cmake
+  src/
+    main.cpp
+    pch.h
+    config/config.{h,cpp}
+    input/input.{h,cpp}
+    render/renderer.{h,cpp}
+    render/present_hook.{h,cpp}
+    render/dx11/d3d11_util.{h,cpp}
+    events/hit_events.{h,cpp}
+    hooks/hooks.{h,cpp}
+```
 
-A local rule copy, fallback, symlink, or second hash inventory is forbidden;
-the discovered skill's rule paths are part of the required execution context.
+- One root CMakeLists creates the SHARED target, gathers src sources, configures
+  Plugin.h and the RC resource, adds extern/CommonLibSSE and links dependencies.
+- Plugin.h provides PLUGIN_NAMESPACE/BEGIN/END and Plugin::Plugin_Name,
+  Plugin_Version and Plugin_Author. Keep the reference's logger alias and
+  class/module conventions; substitute the new project namespace and author.
+- main.cpp defines SKSEPlugin_Load, SKSEPlugin_Query and SKSEPlugin_Version
+  explicitly, like the reference. Do not add add_commonlibsse_plugin or a second
+  generated metadata translation unit.
+- Setting owns Config and INI I/O; InputManager owns event registration;
+  Renderer delegates to an internal OverlayDirector; PresentHook::instance()
+  owns its original callback, installation and state. Use REX::W32 interfaces.
+- Render utilities retain the reference's immediate-context state-capture and
+  shader-compilation pattern. Do not replace them with the former DirectXTK
+  BasicEffect/deferred esp_renderer design.
 
-## When to use
+The template intentionally omits corpse scanning, loot filters, QuickLoot,
+SKSE-MCP UI, mask/icon passes and their shaders. Add those only for a requested
+feature. A generic render callback remains an explicit extension point with
+no visible drawing, rather than copying game-specific product behavior.
 
-- Create a new Skyrim SE/AE/VR SKSE DLL project.
-- Add or maintain INI configuration, Present-frame hotkeys, a safe D3D11
-  Present overlay, a vtable hook, or a hit-event sink.
-- Verify that an existing generated project still follows this package's
-  runtime, build, dependency, Git, and license invariants.
+## Generate
 
-## PLAN external-research binding
-
-The generic conditional `External Research Gate` belongs to
-`lightweight-coding-workflow`; this section binds Skyrim-specific triggers to
-that gate and does not create a second research policy. Mark research
-`required` before approving plugin architecture that depends on CommonLib or
-SKSE APIs, ABI or layout-sensitive code, relocation or vtable hooks, rendering
-or `Present`, event/input/serialization/Papyrus integration, SE/AE/VR runtime
-differences, new dependencies, or copied third-party design. These triggers
-apply even when a local prototype exists if mature upstream or GitHub prior
-art is likely.
-
-The proposal and its Evidence Packet record the target runtime(s), CommonLib
-branch/version, upstream and implementation maintenance status, license and
-reuse status, and the relevant implementation differences. For low-level or
-non-trivial architecture, require authoritative CommonLib/SKSE evidence plus a
-maintained implementation matching the target runtime, or document why only
-one source exists. Check Address Library/relocation identifiers, vtable or
-layout assumptions, renderer lifecycle, and runtime-specific branches rather
-than treating a copied snippet as authority. If required evidence is
-unavailable or insufficient, return to PLAN before approving or changing the
-architecture; never invent a Skyrim-compatible design. Trivial mechanical
-metadata or changes fully determined by local code/tests/canonical project
-documentation may be marked not-required with an explicit reason.
-
-## Scaffold
-
-Run from this Skill directory:
+From this skill directory (or use an absolute path to the script):
 
 ```powershell
-python scripts/scaffold.py --name My_Plugin --author "Your Name" --dir C:/work/My_Plugin
+python scripts/scaffold.py --name MyPlugin --author "Your Name" --dir C:/work/MyPlugin
+python scripts/scaffold.py --name BarePlugin --features none --dir C:/work/BarePlugin
 python scripts/scaffold.py --help
 ```
 
-The generator validates every input before reporting success. `--name` must be
-a CMake/C++ identifier and is normalized to a lowercase hyphenated vcpkg name
-plus a lowercase snake-case C++ root namespace. Camel-case boundaries become
-underscores, repeated underscores collapse, and C++ keywords receive a
-`_plugin` suffix; the reserved standard namespace name `std` is handled the
-same way.
-`--baseline` is exactly 40 hexadecimal characters. Author values reject unsafe
-CMake/C++ delimiters; descriptions support quotes through context-specific
-escaping but reject multiline/control/template-delimiter input.
+Defaults: SE/AE, config + hotkey + present_hook. Other supported optional
+modules are event_sink and vtable_hook. The generator reads templates/src
+directly and selects module files; there is no templates/features directory.
+hotkey requires config only. VR must be explicit, with a compatible selection
+such as --runtimes vr --features config,hotkey,event_sink. The flat Present and
+Character-vtable examples reject VR until a verified adaptation is supplied.
 
-Supported runtime values are `all`, `se`, `ae`, `vr`, `se-ae`, `se-vr`,
-and `ae-vr`. Supported features are `config`, `present_hook`, `hotkey`,
-`vtable_hook`, and `event_sink`. `hotkey` requires both `config` and
-`present_hook` because the Present callback invokes the generated
-`<project>::input::poll()`.
+Output must be absent or empty. Generation is offline by default; --git-init
+initializes a repository and --add-commonlib-submodule also fetches the ng
+CommonLib submodule. Commit the real gitlink and .gitmodules. Source generation
+does not implicitly deploy into Skyrim.
 
-Only `alandtse/CommonLibSSE-NG` branch `ng` is supported. `--git-init` is
-local-only. `--add-commonlib-submodule` is separately named and
-network-capable; it runs:
+Names, author, description, version and baseline are validated before writing.
+Names derive a snake-case namespace and hyphenated package name. Version limits
+are major/minor <=255 and patch <=4095, matching SKSE's packed representation.
+The same inputs produce the same files.
 
-```powershell
-git init
-git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git ext/CommonLibSSE
-```
+## Runtime lifecycle
 
-Default generation runs neither command and creates no `.gitmodules`. After a
-real submodule add, commit both `.gitmodules` and the
-`ext/CommonLibSSE` gitlink.
-
-## Execution rules
-
-1. Read [multi-runtime.md](references/multi-runtime.md) before changing runtime
-   options, address resolution, or plugin metadata.
-2. Read [build-and-verify.md](references/build-and-verify.md) before changing
-   presets, CommonLib/vcpkg acquisition, dependencies, or build boundaries.
-3. Pass the presence gate above before any scaffold or maintenance work.
-   Before C++ or CMake work, read every applicable document from the
-   discovered `lightweight-coding-workflow` skill's
-   `assets/coding-rules/small-project-cpp-rules/SKILL.md` C++ rule index and
-   its `assets/coding-rules/small-project-code-contract/SKILL.md` shared
-   code contract.
-4. Keep the generator, every template, generated README/license/resource
-   metadata, and the two focused references consistent.
-
-## Generated project contract
-
-The generated root `CMakeLists.txt` owns project metadata, `COPY_OUTPUT`,
-runtime options, and CommonLib source discovery. CommonLib is loaded from
-`ext/CommonLibSSE` or `COMMONLIBSSE_SOURCE_DIR`; the source target uses
-`add_commonlibsse_plugin(...)` with explicit first-party sources. CommonLib
-generates plugin Query/version metadata and VERSIONINFO resources. Do not add
-hand-written Query/version exports, a fixed runtime list, global warning flags,
-or an exact MSVC patch pin.
-
-Every first-party declaration is under the normalized lowercase snake-case
-project namespace and lowercase module namespaces, except required external
-ABI/framework names such as `SKSEPlugin_Load` and `ProcessEvent`. Keep
-first-party `.h.in` templates lowercase while retaining conventional CMake and
-generated-project documentation filenames.
-
-Feature ownership is fixed:
-
-| Feature | Generated responsibility |
+| Phase | Default action |
 | --- | --- |
-| `config` | `config::load()` owns persisted state; the mutex protects copies and atomics carry render-thread values. |
-| `present_hook` | `esp_renderer::install()` runs after data loaded and records D3D11 work on a deferred context. |
-| `hotkey` | Requires `config` and `present_hook`; `input::poll()` reads atomic configuration at the start of Present. |
-| `vtable_hook` | `hooks::install()` resolves the Character vtable through `RE::VTABLE_Character` and `REL::Relocation`. |
-| `event_sink` | `hit_events::install()` registers a process-lifetime static sink. |
+| Load | Module-reset workaround, logging, SKSE::Init, Setting::load, checked message listener. |
+| DataLoaded | Optional HitEvents and Hooks installation. |
+| NewGame / PostLoadGame | Renderer and InputManager installation. |
+| SaveGame | Setting::save. |
+| Keyboard event | Convert configured virtual-key code to scan code, toggle on IsDown. |
+| Present | Serialized render callback, followed by saved original Present. |
 
-`main.cpp` initializes logging, calls `SKSE::Init`, registers one message
-listener, and dispatches selected Load/Data-loaded glue. Present code keeps only
-device-bound helpers across frames, resets them on device change, uses local
-per-frame COM references, executes the deferred command list with state
-restoration, and never retains a swap-chain back buffer or render-target view.
-The SKSE Load/message boundaries and the Present callback catch failures before
-crossing their external ABI boundaries and always preserve the original Present
-call. Input, allocation, locking, and file I/O are not marked `noexcept` unless
-their implementation has a real no-throw guarantee.
+Hotkey config retains the reference's **Windows virtual-key codes**, e.g. F7 =
+118 / 0x76; zero disables it. Do not silently migrate it to scan-code storage.
+Successful registration and hook installation must be idempotent. Keep null
+checks and exception containment at external callbacks, and avoid noexcept on
+methods doing allocation, locking or file I/O without containment.
 
-## Build and external boundaries
+## Build and maintenance
 
-Generated projects expose Debug and Release configure/build presets inherited
-from a hidden Visual Studio 2022 x64 `msvc` base:
+Read [build-and-verify.md](references/build-and-verify.md) for presets, dependencies,
+package layout and validation. Read [multi-runtime.md](references/multi-runtime.md)
+before changing engine ABI, metadata, hooks or renderer state management.
 
-```powershell
-cmake --preset "msvc debug"
-cmake --build --preset "msvc debug"
-cmake --preset "msvc release"
-cmake --build --preset "msvc release"
-```
+Inspect project instructions and existing conventions first. If the host exposes
+lightweight-coding-workflow, use its canonical C++ and shared coding-rule
+references when applicable; do not duplicate their files here. The explicit
+reference-project architecture in this skill takes precedence over older
+template preferences. Do not require unavailable discovery APIs or invent gates.
 
-Default scaffolding is local and does not initialize Git or fetch CommonLib.
-`--git-init` is local-only; `--add-commonlib-submodule` is the explicitly named
-network-capable option and creates the `ext/CommonLibSSE` submodule. Generated
-output defaults to GPL-3.0-or-later; CommonLibSSE-NG's upstream Modding and
-Linking Exceptions remain unchanged.
+Keep scripts, templates and documentation synchronized. For existing projects,
+inspect before migration; the generator does not overwrite them. Verify against
+the actual CommonLib revision rather than assuming a current ng branch matches
+the recorded snapshot. Keep source, compile/link, and live-game evidence distinct.

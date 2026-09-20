@@ -1,151 +1,92 @@
-# Build, acquisition, and verification
+# Build and verification
 
-## Skyrim research checks
+## Build contract
 
-The generic conditional research policy is defined by
-`lightweight-coding-workflow`. For a plugin architecture involving CommonLib,
-SKSE, a dependency, or copied third-party design, the SKSE binding requires
-read-only evidence for the target runtime(s), CommonLib branch/version,
-maintenance status, license/reuse status, and implementation differences.
-Prefer pinned upstream source/documentation and a maintained implementation
-that matches SE, AE, or VR. Do not treat a GitHub README, snippet, or popularity
-as authority. If the required evidence is unavailable or incompatible, return
-to PLAN before changing the build or architecture; acquisition commands below
-remain explicit external actions and are never implied by research.
+Use Windows x64, Visual Studio 2022/v143, Windows SDK, CMake 3.22+, C++23 and
+vcpkg. The root CMake owns the single plugin target. src has no CMakeLists.
+Sources use GLOB_RECURSE CONFIGURE_DEPENDS to follow the reference's source-tree
+pattern while noticing added modules. Generated Plugin.h is in build/src and
+version.rc is in build; the resource type is DLL.
 
-## Toolchain
-
-Generated projects target Windows x64, Visual Studio 2022, C++23, CMake 3.25
-or newer, and vcpkg in manifest mode. Set `VCPKG_ROOT` before configuring.
-SKSE and the runtime-specific Address Library are end-user requirements outside
-this source package.
-
-The generated project does not pin an exact Visual C++ patch version. It lets
-the selected VS2022 installation and vcpkg triplet resolve a compatible v143
-toolset. First-party diagnostics are private target options, including
-`/W4 /WX`; there is no global compiler-flags cache value and no mutation of
-CommonLib's target.
-
-## CommonLib acquisition
-
-Default scaffolding is offline and prints the manual commands. `--git-init`
-runs only local repository initialization. To acquire CommonLib explicitly:
+Use add_library(SHARED), not add_commonlibsse_plugin. main.cpp already owns all
+three SKSE exports; introducing the helper duplicates discovery exports.
+Metadata stays sourced from project version/name/author through Plugin.h.
 
 ```powershell
 git init
-git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git ext/CommonLibSSE
+git submodule add -b ng https://github.com/alandtse/CommonLibSSE-NG.git extern/CommonLibSSE
 git submodule update --init --recursive
+cmake --preset Release
+cmake --build --preset Release
+cmake --preset Debug
+cmake --build --preset Debug
+cpack -C Release --config build/CPackConfig.cmake
 ```
 
-The add command creates a real `.gitmodules` and gitlink; commit both. The
-separately named `--add-commonlib-submodule` option runs the first two commands
-and is network-capable.
+Set VCPKG_ROOT first. The presets inherit cmake-dev, vcpkg and windows, matching
+the reference. Both configurations share build/, with explicit configuration
+in build presets (CMAKE_BUILD_TYPE does not select a VS configuration).
+The DLL is build/Release/<name>.dll. CPack creates a main ZIP with
+SKSE/Plugins/<name>.dll, README and LICENSE, and a separate PDB ZIP.
 
-For an existing local source tree, set `COMMONLIBSSE_SOURCE_DIR` as a CMake cache
-variable or environment variable. The path must contain CommonLib's
-`CMakeLists.txt`. No legacy implementation fallback exists.
+The root prefers extern/CommonLibSSE, with COMMONLIBSSE_SOURCE_DIR as an optional
+local source override. Default generation is offline and doesn't initialize Git.
+--git-init is local-only; --add-commonlib-submodule performs the acquisition
+above except the recursive update. Commit .gitmodules and the actual gitlink.
+If acquisition fails after files are generated, inspect them rather than
+rerunning into the now nonempty directory.
 
-## Preset build
+## Dependencies and compiler
 
-`CMakePresets.json` contains a hidden Visual Studio 2022 x64 `msvc` configure
-base plus matching public Debug and Release configure/build presets:
+Default manifest constraints match the inspected CommonLib 8.0.1 manifest at
+d13d10a0ccb4945870eb841bf1ad8a6cf5ed84dd, baseline
+ee12231b20c95013c6638d845d04c91559a1d1ff. Root vcpkg installs dependencies;
+the embedded subdirectory manifest is not recursively installed. The reference
+plugin's older reduced manifest is insufficient as the library's dependency
+authority. Compare manifests when acquiring a newer ng revision.
+
+Match x64-windows-static-md with /MD Release or /MDd Debug. Match MSVC toolsets
+of plugin and cached libraries. The source project's exact compiler patch
+pin is a local workaround, not a mandatory installed version for all users.
+Set a local user preset toolset if needed and rebuild mismatched dependencies.
+Never hide an unresolved __std_* symbol mismatch by changing warnings.
+
+CommonLib may fetch patch-safety sources or prebuilt dependencies while
+configuring. An offline generator does not guarantee an offline build. Use
+cached ports and explicit FetchContent source overrides for offline checks.
+Only directly link feature libraries as needed (SimpleIni, user32,
+d3d11/dxgi/d3dcompiler). CommonLib may independently require DirectXTK.
+
+COPY_OUTPUT defaults OFF. Explicitly enabling it requires
+COMPILED_PLUGINS_PATH to a mod Data root; SKSE/Plugins is appended. Build-only
+work does not request overwriting a live game installation.
+
+## Verify
 
 ```powershell
-cmake --preset "msvc debug"
-cmake --build --preset "msvc debug"
-cmake --preset "msvc release"
-cmake --build --preset "msvc release"
-cpack --config "build/msvc release/CPackConfig.cmake"
+python scripts/test_scaffold.py
+python <skill-creator-root>/scripts/quick_validate.py <skill-directory>
 ```
 
-Each build preset references the same-named configure preset and maps explicitly
-to Debug or Release for the Visual Studio multi-config generator. Expected
-release DLL output is below `build/msvc release/src/Release/`. Packaging
-installs the DLL under `SKSE/Plugins` and the PDB at package root.
+Generate a minimal (--features none), default, and all-feature project. Check
+the template/source tree, selected module dependencies and valid JSON. List
+configure/build presets. Configure against real CommonLib, build Release and
+Debug where available, inspect one copy of each SKSE export and the RC version,
+and inspect ZIP entries. State whether libraries were reused from a matching
+cache or freshly built; neither proves a fresh vcpkg install succeeded.
 
-`COPY_OUTPUT` is off by default. To enable it, set `COMPILED_PLUGINS_PATH` and
-configure with `-DCOPY_OUTPUT=ON`. This is an explicit local deployment write,
-not part of source-package maintenance.
+For runtime claims verify Load, DataLoaded, NewGame, repeated save loads,
+SaveGame INI persistence, keyboard repeats/menus and rendering in each claimed
+executable. Compilation is not live-game evidence.
 
-## Dependency lock
+## Migrate from the previous skill output
 
-The default baseline
-`ee12231b20c95013c6638d845d04c91559a1d1ff` and versioned dependency entries
-mirror CommonLibSSE-NG v6.7.0 branch `ng` on 2026-08-25. CommonLib currently
-requires vcpkg-cmake-config, DirectXMath, DirectXTK, fmt, nlohmann-json,
-rapidcsv, SimpleIni, spdlog, toml11, and xbyak. DirectXTK and SimpleIni remain
-in minimal manifests because they are current CommonLib requirements, even
-though the generated first-party target only finds/links them directly when a
-selected feature uses them.
-
-Do not update the submodule independently. Compare CommonLib's manifest, CMake
-helper, runtime defaults, nested content, and license files, then update the
-baseline, versions, runtime references, and license details together.
-
-## External coding-rule authority
-
-The active host Skill catalog is authoritative and must report
-`lightweight-coding-workflow` enabled and discoverable before resolving the
-installed skill's `assets/coding-rules/` directory and `manifest.json`. If the
-catalog is unavailable, inspect loaded Skill metadata, then host-native roots
-including `$CODEX_HOME/skills/`, `~/.codex/skills/`, `~/.zcode/skills/`,
-`~/.agents/skills/`, `<project>/.zcode/skills/`, and
-`<project>/.agents/skills/`. Filesystem presence alone is insufficient; require
-enabled and discoverable status. A separately copied SKSE rule set, fallback,
-symlink, or second hash inventory is not allowed. When the dependency is not
-available, record scaffolding or maintenance work as blocked rather than
-proceeding without the discovered authority.
-
-Update the rules only in the lightweight source through a separately approved
-change. Keep the shared code contract, applicable C++ references, manifest
-entries, and this direct dependency aligned; do not cache hashes or copy rule
-files into the SKSE package.
-
-## Generated-project inspection
-
-When CMake is installed, list presets without configuring dependencies:
-
-```powershell
-cmake --list-presets
-cmake --build --list-presets
-```
-
-Both outputs must expose `msvc debug` and `msvc release`. When
-`C:/env/vcpkg/vcpkg.exe` exists, copy a generated `vcpkg.json` to an isolated
-temporary fixture and run:
-
-```powershell
-C:/env/vcpkg/vcpkg.exe format-manifest <temporary-vcpkg.json>
-```
-
-Formatting changes must remain in the temporary fixture.
-
-## Version 0.3 migration
-
-Existing generated projects must move the CommonLib gitlink from
-`extern/CommonLibSSE` to `ext/CommonLibSSE`, rename `CompiledPluginsPath` to
-`COMPILED_PLUGINS_PATH`, and rename `CommonLibSSEPath_NG` to
-`COMMONLIBSSE_SOURCE_DIR`. Regenerate or migrate first-party declarations into
-the normalized project root namespace and lowercase module namespaces. CMake
-3.25 is now the minimum, and local workflows may use both `msvc debug` and the
-unchanged `msvc release` commands.
-
-## External build and runtime verification
-
-A release claim additionally requires a real CommonLib checkout, installed
-vcpkg dependencies, Windows SDK/MSVC, SKSE, and at least one selected Skyrim
-runtime. Verify configure, build, package contents, plugin/SKSE logs, Load/data
-messages, and selected hooks. Expand across SE/AE/VR whenever runtime-sensitive
-code changes.
-
-Template inspection alone does not prove a DLL links or runs in Skyrim. Record
-unavailable compiler, SDK, submodule, vcpkg, game, and Address Library checks as
-unverified rather than success.
-
-## Licensing check
-
-Generated `README.md`, `LICENSE`, and VERSIONINFO must all state
-GPL-3.0-or-later. CommonLibSSE-NG's own Modding Exception and GPL-3.0 Linking
-Exception (with Corresponding Source) remain upstream terms. Before distributing
-a statically linked DLL, review the exact exception and corresponding-source
-requirements at the pinned CommonLib revision.
+This is a replacement architecture, not a source-compatible template update.
+Move target construction to root; remove src/CMakeLists and helper-generated
+metadata; replace plugin_version.h.in with Plugin.h.in and update callers.
+Replace namespace free functions with Setting/InputManager/Renderer/PresentHook
+module APIs. Use Release/Debug presets and the root build output location.
+Previous revision scan-code INIs require explicit migration back to VK values
+(F7 65 becomes 118); already-reference-compatible VK files need no migration.
+Do not apply both changes to the same file. Preserve existing user projects
+until their callers and build integration have been reviewed.
