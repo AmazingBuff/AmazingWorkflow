@@ -643,9 +643,6 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
     protocol_path = root / "references/protocol.md"
     adapter_path = root / "references/adapters/codex.md"
     adapter_contract_path = root / "references/adapter-contract.md"
-    skse_skill_path = root.parent / "skse-plugin-template/SKILL.md"
-    skse_build_path = root.parent / "skse-plugin-template/references/build-and-verify.md"
-    skse_runtime_path = root.parent / "skse-plugin-template/references/multi-runtime.md"
 
     try:
         plan_schema = load_json(schema_path)
@@ -998,9 +995,6 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         protocol_text = protocol_path.read_text(encoding="utf-8")
         adapter_text = adapter_path.read_text(encoding="utf-8")
         adapter_contract_text = adapter_contract_path.read_text(encoding="utf-8")
-        skse_skill_text = skse_skill_path.read_text(encoding="utf-8")
-        skse_build_text = skse_build_path.read_text(encoding="utf-8")
-        skse_runtime_text = skse_runtime_path.read_text(encoding="utf-8")
         adapter_meta = read_adapter_front_matter(adapter_path)
         config_path.read_text(encoding="utf-8")
         example_path.read_text(encoding="utf-8")
@@ -1131,26 +1125,6 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
                 errors.append(
                     f"Host Adapter Contract is missing required PLAN-task term: {term}"
                 )
-        required_skse_terms = {
-            "External Research Gate",
-            "CommonLib",
-            "SKSE APIs",
-            "ABI or layout-sensitive",
-            "relocation or vtable hooks",
-            "rendering",
-            "`Present`",
-            "event/input/serialization/Papyrus integration",
-            "SE, AE, or VR",
-            "maintenance status",
-            "license",
-            "reuse status",
-            "implementation differences",
-            "maintained implementation",
-            "return to PLAN",
-        }
-        for term in sorted(required_skse_terms):
-            if term not in skse_skill_text:
-                errors.append(f"SKSE research binding is missing required term: {term}")
         required_generic_research_terms = {
             "External Research Gate",
             "`required`, `recommended`, or `not-required`",
@@ -1167,21 +1141,6 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
         for term in sorted(required_generic_research_terms):
             if term not in skill_text:
                 errors.append(f"workflow Skill is missing research policy term: {term}")
-        for label, text_value in (
-            ("SKSE build reference", skse_build_text),
-            ("SKSE runtime reference", skse_runtime_text),
-        ):
-            for term in (
-                "target runtime",
-                "CommonLib",
-                "branch",
-                "maintenance",
-                "license",
-                "implementation",
-                "difference",
-            ):
-                if term.lower() not in text_value.lower():
-                    errors.append(f"{label} is missing research-check term: {term}")
         if "discovery_authorization.authorized" in adapter_contract_text:
             errors.append(
                 "Host Adapter Contract retains obsolete discovery_authorization authorization semantics"
@@ -1812,9 +1771,6 @@ def check_contract_parity(root: Path) -> dict[str, Any]:
             str(agent_path),
             str(implementer_path),
             str(adapter_contract_path),
-            str(skse_skill_path),
-            str(skse_build_path),
-            str(skse_runtime_path),
         ],
     }
 

@@ -6,8 +6,8 @@ PLUGIN_NAMESPACE_BEGIN
 
 struct Config
 {
-    bool enabled{ true };
-    uint32_t hotkey{ 0x76 }; // F7 virtual-key code; zero disables.
+    bool enabled;
+    uint32_t hotkey;
 };
 
 class Setting
@@ -22,7 +22,7 @@ public:
     void load();
     void save();
 private:
-    Setting() = default;
+    Setting();
     ~Setting() = default;
     mutable std::mutex m_config_mutex;
     std::mutex m_file_mutex;

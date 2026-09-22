@@ -56,6 +56,7 @@ feature.json 的字段：
 ## 当前适配行为
 
 config::Setting 使用加锁快照和 toggle 接口，load/save 在游戏入口/SaveGame 调用；
+Config 只声明字段；默认值集中在 config.cpp 的 Default_Config，Setting 构造和 INI 缺项读取均使用该值。
 示例键值是 VK F7 (0x76)，不是扫描码。配置不存在时使用示例默认值，保存时创建 INI。
 input 在 DataLoaded 和 game-ready 消息上尝试幂等注册，只处理键盘 IsDown；menu 同时选中时
 额外检查 Menu::is_menu_open，没选 menu 就没有该 include/调用。
@@ -71,9 +72,8 @@ state capture 的捕获范围、设备重建、窗口 resize、事件/线程和�
 已有项目可以只复制一个 feature 的所需文件，但必须一并检查 manifest 中的构建和生命周期
 接入点；不要把 generator 用作覆盖已有项目的升级命令。裁剪模块仍遵循 reuse-guide.md。
 
-回归测试检查默认最小输出、依赖补齐、每个 feature、所有两两组合和全集的文件/include
-一致性。真实 Release 编译验证全集，另外区分游戏内行为、Debug/VR 和依赖获取是否经过验证。
+日常 `python scripts/test_scaffold.py` 只运行最小输出和 config + shaders 接入两个案例；也可传入具体 unittest 测试名，仅运行本次相关项。需要检查所有 feature、两两组合、全集及 I/O 边界时显式传 `--full`，说明扩大范围的原因。普通插件修改不执行这套完整生成器回归；按 lightweight 的契约选择 1–2 个案例。构建按受影响目标选择，游戏内行为、Debug/VR 和依赖获取是否验证分别报告。
 
-本次验证：默认生成仍为 12 个文件；10 个独立选择、45 个两两组合及全集通过生成检查。
+此前 feature 引入时的验证（不代表后续修改均已重新验证）：默认生成仍为 12 个文件；10 个独立选择、45 个两两组合及全集通过生成检查。
 全集已用 MSVC 19.44.35228 / Windows SDK 10.0.26100.0 配置并编译链接为 DLL，复用匹配的
 CommonLib 静态库和已有 vcpkg 缓存。游戏内运行、Debug/VR 构建和全新网络依赖获取未验证。

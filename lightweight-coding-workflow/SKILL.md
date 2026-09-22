@@ -217,6 +217,11 @@ default to `none`.
 
 ## Planning and approval
 
+For HLSL work, load [HLSL coding rules](assets/coding-rules/small-project-hlsl-rules/SKILL.md)
+and its shared cpp-style baseline, then select the DX12 (optionally Vulkan)
+or DX11 reference for the actual compiler and target. Include those paths in
+Applicable coding rules; do not infer DX11 compatibility from DX12 samples.
+
 For Codex, apply [Codex implementation economy](references/adapters/codex.md#codex-implementation-economy)
 when planning, implementing, and reviewing: minimize defensive checks and
 `Validate*` helpers, and select 1–2 meaningful test cases total per change.

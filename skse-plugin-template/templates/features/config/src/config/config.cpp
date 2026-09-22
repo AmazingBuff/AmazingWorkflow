@@ -5,6 +5,8 @@ PLUGIN_NAMESPACE_BEGIN
 
 namespace
 {
+    constexpr Config Default_Config{ .enabled = true, .hotkey = 0x76 };
+
     std::filesystem::path get_config_path()
     {
         std::wstring_view executable = REL::Module::get().filePath();
@@ -12,6 +14,8 @@ namespace
             (std::string(Plugin::Plugin_Name) + ".ini");
     }
 }
+
+Setting::Setting() : m_config(Default_Config) {}
 
 Setting& Setting::instance()
 {
@@ -39,7 +43,7 @@ void Setting::load()
     auto const path = get_config_path();
     if (ini.LoadFile(path.c_str()) < 0)
         logger::info("INI unavailable; using defaults");
-    Config config;
+    Config config = Default_Config;
     config.enabled = ini.GetBoolValue("General", "Enabled", config.enabled);
     auto const key = ini.GetLongValue("General", "Hotkey", static_cast<long>(config.hotkey));
     config.hotkey = key >= 0 && key <= 0xFE ? static_cast<uint32_t>(key) : 0u;

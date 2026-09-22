@@ -6,6 +6,7 @@
 ## 最小项目
 
 main.cpp 只负责入口、日志和必要初始化。pch.h 放稳定且广泛使用的基础头文件，
+可包含实际使用的 CommonLib、SKSE、fmt 等第三方库头；遵循 lightweight 的 cpp-style，
 引入构建生成的 plugin.h。元数据来自根 CMake 的 PROJECT_NAME、PROJECT_VERSION、
 PROJECT_NAMESPACE、PROJECT_AUTHOR；不要在多个模块复制项目名/版本字符串。
 

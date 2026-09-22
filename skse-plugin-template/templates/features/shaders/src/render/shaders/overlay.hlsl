@@ -1,24 +1,24 @@
-struct VS_IN
+struct VertexInput
 {
-    float3 pos : POSITION;
+    float3 position : POSITION;
     float4 color : COLOR;
 };
 
-struct PS_IN
+struct VertexOutput
 {
-    float4 pos : SV_Position;
+    float4 position : SV_Position;
     float4 color : COLOR;
 };
 
-PS_IN vs_main(VS_IN input)
+VertexOutput vs_main(VertexInput input)
 {
-    PS_IN o;
-    o.pos = float4(input.pos, 1.0f);
-    o.color = input.color;
-    return o;
+    VertexOutput output;
+    output.position = float4(input.position, 1.0f);
+    output.color = input.color;
+    return output;
 }
 
-float4 ps_main(PS_IN input) : SV_Target
+float4 ps_main(VertexOutput input) : SV_Target0
 {
     return float4(input.color.rgb, input.color.a);
 }

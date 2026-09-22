@@ -17,7 +17,9 @@ Highlight-Lootable-Corpses 提供组织方式和具体实现参考，不是必�
 4. 选取参考实现时检查依赖、对象所有权、调用线程、生命周期和运行时适配；删掉原业务耦合后接入。
 5. 只验证本次实际生成或修改的内容。编译、单元测试和游戏内验证分别报告。
 
-不要为本流程额外要求新任务或重复授权。用户已要求实现时，直接完成已明确的工作。
+与 lightweight-coding-workflow 同时使用时，以 lightweight 为主：由其 Planner 管理范围、授权、实现契约和验证，由同一实现 worker 执行生成或修改；本 skill 只补充 SKSE 文件组织、CMake 和代码复用规则。既有用户授权继续有效，不建立第二套规划/审批流程或额外 writer，也不绕过 lightweight 的职责边界。
+
+单独使用本 skill 时，用户已要求实现便直接完成已明确的工作，不为本流程额外要求新任务或重复授权。
 
 ## 默认模板边界
 
@@ -82,5 +84,6 @@ python scripts/test_scaffold.py
 python -X utf8 <skill-creator-root>/scripts/quick_validate.py <skill-directory>
 ```
 
-检查生成器能产生最小完整项目、参数正确进入 CMake/元数据、不覆盖现有文件且不默认联网。
-生成插件实际配置/编译后，再按新增功能选择测试。不要为未引入的模块执行或声称验证。
+默认运行两个代表案例：最小插件边界，以及 config + shaders 的依赖和生成接入。只想验证一个受影响行为时，可直接指定 unittest 测试名；维护生成器依赖解析或发布前确有全量回归需要时，显式运行 `python scripts/test_scaffold.py --full`，不要把全量矩阵作为日常默认。
+
+普通插件任务只选本次实际受影响的 1–2 个案例，不因使用模板而执行生成器全量测试。与 lightweight 组合时服从实现契约的 Verification 和 Codex 测试预算。编译、游戏内验证与未验证部分分别报告。

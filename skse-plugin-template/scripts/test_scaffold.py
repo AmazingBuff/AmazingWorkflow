@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import itertools
+import sys
 from unittest.mock import patch
 import scaffold as s
 
@@ -14,6 +15,21 @@ def options(*args):
 
 
 class ScaffoldTests(unittest.TestCase):
+    def test_config_shader_integration(self):
+        selection = options('--features', 'config,shaders')
+        self.assertEqual(set(selection.features), {'config', 'dx11', 'shaders'})
+        output = s.render_project(selection)
+        for relative in ('src/config/config.cpp', 'src/render/shader_manager.cpp',
+                         'src/render/shaders/overlay.hlsl', 'cmake/shaders.cmake'):
+            self.assertIn(Path(relative), output)
+        self.assertNotIn(Path('src/ui/ui_menu.cpp'), output)
+        deps = json.loads(output[Path('vcpkg.json')])['dependencies']
+        self.assertEqual(deps.count('simpleini'), 1)
+        cmake = output[Path('CMakeLists.txt')]
+        self.assertIn('include(cmake/shaders.cmake)', cmake)
+        self.assertIn('d3dcompiler', cmake)
+        self.assertTrue(all(s.TOKEN.search(text) is None for text in output.values()))
+
     def test_feature_selection_and_pairs(self):
         names=list(s.features.catalog())
         selections=[(name,) for name in names]+list(itertools.combinations(names,2))+[tuple(names)]
@@ -109,4 +125,13 @@ class ScaffoldTests(unittest.TestCase):
 
 
 if __name__=='__main__':
-    unittest.main(verbosity=2)
+    full = '--full' in sys.argv
+    if full:
+        sys.argv.remove('--full')
+    unittest.main(
+        verbosity=2,
+        defaultTest=None if full else (
+            'ScaffoldTests.test_minimal_dependency_and_source_boundary',
+            'ScaffoldTests.test_config_shader_integration',
+        ),
+    )

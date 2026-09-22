@@ -12,7 +12,7 @@
   "files": [
     {
       "path": "README.md",
-      "sha256": "bf8b22ce465308d351052954995c9fbdccc20e1cb70f5fa61c57350d484eebf5",
+      "sha256": "fecfd2d882609244f2a77246262b42a80edfaee123fbc5dd8876cb67b5808fba",
       "provenance": "Authored in this package to describe the composite adaptation of the small-project workflow rules at git 5fb6ec0.",
       "synchronization": "Keep the component inventory, adaptation notes, manifest policy, and affected hashes synchronized in one reviewed change."
     },
@@ -36,9 +36,9 @@
     },
     {
       "path": "small-project-cpp-rules/references/cpp-style.md",
-      "sha256": "a17bb20f388ad95a0c64d0dc8c1a47b74b02eef01f9a3608e59441de9a7e807b",
-      "provenance": "Copied unchanged from small-project-workflow-spec at git 5fb6ec0.",
-      "synchronization": "If an approved upstream version changes, compare it manually, copy only intended rule changes, and update this hash."
+      "sha256": "42bb364ebd5ac703f46b9a00394577eb388ccf267e40298ba7f39c266c510458",
+      "provenance": "Adapted from SPW git 5fb6ec0 with package-local C++ style revisions and used as the HLSL inheritance baseline. PCH now explicitly permits stable third-party headers and generated version/metadata headers.",
+      "synchronization": "Review C++ style changes manually and their effect on HLSL inheritance; keep the current file hash and adaptation notes synchronized."
     },
     {
       "path": "small-project-cpp-rules/references/decision-policy.md",
@@ -69,6 +69,24 @@
       "sha256": "0bc8cb9e5e84c860cd865e1e58e24d27f79a4f6a78ee8ecfcefb7b1f2fa00aaf",
       "provenance": "Adapted from small-project-workflow-spec at git 5fb6ec0; loader and built-in-workflow language were mapped to this package.",
       "synchronization": "Review upstream rule changes manually, preserve self-contained package terminology, and update this hash with the adaptation notes."
+    },
+    {
+      "path": "small-project-hlsl-rules/references/hlsl-dx11.md",
+      "sha256": "5b369977e1515c18771a470439ef578cbeda29749874f2120c302abca36a8dff",
+      "provenance": "Authored 2026-09-22 from engine/res/shader HLSL patterns, the bundled cpp-style baseline, and linked Microsoft compiler documentation; DX11 is a compatibility adaptation.",
+      "synchronization": "Review shader/compiler changes manually; preserve shared C++ style inheritance, target-specific binding rules, and the 1-2 case budget; update this hash with the component notes."
+    },
+    {
+      "path": "small-project-hlsl-rules/references/hlsl-dx12.md",
+      "sha256": "8de74c7ea3fd3d52d79e4a0845daf46b7cf8eabe146c867ecae79c51d07256a1",
+      "provenance": "Authored 2026-09-22 from engine/res/shader HLSL patterns, the bundled cpp-style baseline, and linked Microsoft compiler documentation; DX11 is a compatibility adaptation.",
+      "synchronization": "Review shader/compiler changes manually; preserve shared C++ style inheritance, target-specific binding rules, and the 1-2 case budget; update this hash with the component notes."
+    },
+    {
+      "path": "small-project-hlsl-rules/SKILL.md",
+      "sha256": "11b75c3b219d30f6fe39073fcca71f6ff24dcefe05e222ec84ae7b95a747bc18",
+      "provenance": "Authored 2026-09-22 from engine/res/shader HLSL patterns, the bundled cpp-style baseline, and linked Microsoft compiler documentation; DX11 is a compatibility adaptation.",
+      "synchronization": "Review shader/compiler changes manually; preserve shared C++ style inheritance, target-specific binding rules, and the 1-2 case budget; update this hash with the component notes."
     }
   ]
 }
