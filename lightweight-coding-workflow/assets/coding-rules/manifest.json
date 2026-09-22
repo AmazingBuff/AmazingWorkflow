@@ -36,8 +36,8 @@
     },
     {
       "path": "small-project-cpp-rules/references/cpp-style.md",
-      "sha256": "42bb364ebd5ac703f46b9a00394577eb388ccf267e40298ba7f39c266c510458",
-      "provenance": "Adapted from SPW git 5fb6ec0 with package-local C++ style revisions and used as the HLSL inheritance baseline. PCH now explicitly permits stable third-party headers and generated version/metadata headers.",
+      "sha256": "4be7de67cbcfebd971197cf1a0d2fb2dbb5d8ec3b98b2bb091e1a12daa53f045",
+      "provenance": "Adapted from SPW git 5fb6ec0 with package-local C++ style revisions and used as the HLSL inheritance baseline. PCH now explicitly permits stable third-party headers and generated version/metadata headers. 2026-09-22: added the avoid-try/catch error-handling rule (return values, error_code, or assertions; narrow exception only at third-party boundaries that cannot be avoided).",
       "synchronization": "Review C++ style changes manually and their effect on HLSL inheritance; keep the current file hash and adaptation notes synchronized."
     },
     {
