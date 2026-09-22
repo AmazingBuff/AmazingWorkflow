@@ -3,54 +3,104 @@ name: skse-plugin-template
 description: Plan file layout, configure CMake and adapt selected reusable code for a C++23 SKSE plugin, using Highlight-Lootable-Corpses as an organizational reference. Generate a minimal plugin by default; select reusable modules from templates/features only when needed.
 ---
 
-# SKSE 插件结构与复用
+# SKSE Plugin Structure and Reuse
 
-本 skill 主要指导三件事：**如何编排文件、如何配置 CMake、如何按需调整可复用代码**。
-Highlight-Lootable-Corpses 提供组织方式和具体实现参考，不是必须复制的模块清单。
-先从插件的实际功能出发，再选择需要的目录、依赖和实现。
+This skill mainly guides three things: **how to lay out files, how to
+configure CMake, and how to adapt reusable code on demand**.
+Highlight-Lootable-Corpses provides the organizational pattern and concrete
+implementation reference; it is not a mandatory module checklist. Start from
+the plugin's actual features, then choose the directories, dependencies, and
+implementations you need.
 
-## 工作顺序
+## Working order
 
-1. 阅读现有项目和用户需求，确定本次功能需要哪些运行时能力。维护已有项目时保留其有效结构。
-2. 给出本次文件布局及职责、CMake 增量、拟复用代码的来源和裁剪范围；小任务简要说明即可。
-3. 新项目先生成最小可加载插件，再为实际功能增加文件。不要预建空模块，也不要因参考项目存在某模块就引入它。
-4. 选取参考实现时检查依赖、对象所有权、调用线程、生命周期和运行时适配；删掉原业务耦合后接入。
-5. 只验证本次实际生成或修改的内容。编译、单元测试和游戏内验证分别报告。
+1. Read the existing project and the user request; determine which runtime
+   capabilities this change needs. When maintaining an existing project,
+   keep its working structure.
+2. Present this change's file layout and responsibilities, CMake deltas, and
+   the source and trimming scope of any reused code; a brief statement is
+   enough for small tasks.
+3. For a new project, generate the minimal loadable plugin first, then add
+   files for the actual features. Do not pre-build empty modules, and do not
+   add a module just because the reference project has one.
+4. When selecting a reference implementation, check its dependencies, object
+   ownership, calling thread, lifecycle, and runtime fit; strip the original
+   business coupling before wiring it in.
+5. Verify only what this change actually generates or modifies. Report
+   compilation, unit tests, and in-game verification separately.
 
-与 lightweight-coding-workflow 同时使用时，以 lightweight 为主：由其 Planner 管理范围、授权、实现契约和验证，由同一实现 worker 执行生成或修改；本 skill 只补充 SKSE 文件组织、CMake 和代码复用规则。既有用户授权继续有效，不建立第二套规划/审批流程或额外 writer，也不绕过 lightweight 的职责边界。
+When used together with lightweight-coding-workflow, lightweight takes
+precedence: its Planner manages scope, authorization, implementation
+contracts, and verification, and the same implementation worker performs the
+generation or modification; this skill only supplements SKSE file
+organization, CMake, and code-reuse rules. Existing user authorization
+remains valid; do not create a second planning/approval flow or an extra
+writer, and do not bypass lightweight's responsibility boundaries.
 
-单独使用本 skill 时，用户已要求实现便直接完成已明确的工作，不为本流程额外要求新任务或重复授权。
+When this skill is used alone, complete the explicitly requested work
+directly once the user has asked for implementation; do not require extra
+tasks or repeated authorization for this process.
 
-## 默认模板边界
+## PLAN external-research binding
+
+The generic conditional `External Research Gate` belongs to
+`lightweight-coding-workflow`; this section binds Skyrim-specific triggers to
+that gate and does not create a second research policy. Mark research
+`required` before approving plugin architecture that depends on CommonLib or
+SKSE APIs, ABI or layout-sensitive code, relocation or vtable hooks, rendering
+or `Present`, event/input/serialization/Papyrus integration, differences
+between SE, AE, or VR runtimes, new dependencies, or copied third-party
+design. These triggers apply even when a local prototype exists if mature
+upstream or GitHub prior art is likely.
+
+The proposal and its Evidence Packet record the target runtime(s), CommonLib
+branch/version, upstream and implementation maintenance status, license and
+reuse status, and the relevant implementation differences. For low-level or
+non-trivial architecture, require authoritative CommonLib/SKSE evidence plus a
+maintained implementation matching the target runtime, or document why only
+one source exists. Check Address Library/relocation identifiers, vtable or
+layout assumptions, renderer lifecycle, and runtime-specific branches rather
+than treating a copied snippet as authority. If required evidence is
+unavailable or insufficient, return to PLAN before approving or changing the
+architecture; never invent a Skyrim-compatible design. Trivial mechanical
+metadata or changes fully determined by local code/tests/canonical project
+documentation may be marked not-required with an explicit reason.
+
+## Default template boundary
 
 ```text
-CMakeLists.txt          根目录统一定义插件 target、依赖和编译设置
-CMakePresets.json       工具链、架构、vcpkg 与构建目录
-vcpkg.json             当前依赖清单
-.gitmodules            CommonLib 来源配置；不等于已获取子模块
+CMakeLists.txt          Root file defining the plugin target, dependencies, and compile settings
+CMakePresets.json       Toolchain, architecture, vcpkg, and build directories
+vcpkg.json             Current dependency manifest
+.gitmodules            CommonLib source configuration; does not mean the submodule has been fetched
 cmake/
-  plugin.h.in          CMake 配置项目元数据和命名空间
-  version.rc.in        Windows DLL 版本资源
-  packaging.cmake      保留构建组织示例，发布时另行定义实际安装内容
+  plugin.h.in          CMake-configured project metadata and namespace
+  version.rc.in        Windows DLL version resource
+  packaging.cmake      Kept as a build-organization example; define actual install contents separately when releasing
 src/
-  main.cpp             日志、SKSE 初始化和导出
-  pch.h                核心头文件和项目公共别名
+  main.cpp             Logging, SKSE initialization, and exports
+  pch.h                Core headers and project-wide aliases
 ```
 
-默认生成的项目 **不包含** config、input、ui、render、base 工具集、事件/虚表 hook、ShaderManager、
-SKSE-MCP、着色器或任何游戏业务代码，也不注册没有用途的消息/事件处理器。
-模板中的 CommonLib 传递依赖不代表插件已经实现对应功能。
+A default generated project **does not include** config, input, ui, render,
+base utilities, event/vtable hooks, ShaderManager, SKSE-MCP, shaders, or any
+game business code, and it registers no message/event handler without a
+purpose. The CommonLib transitive dependency in the template does not mean the
+plugin already implements those features.
 
 ```powershell
 python scripts/scaffold.py --name MyPlugin --namespace MyTeam --author "Your Name" --dir C:/work/MyPlugin
 ```
 
-输出目录必须为空；默认只生成文件。--git-init 仅初始化本地 Git；--add-submodules 获取
-CommonLib 及所选 feature 的子模块。--display-name 只设置 README 标题，不会自动引入菜单。
+The output directory must be empty; by default the generator only writes
+files. `--git-init` only initializes local Git; `--add-submodules` fetches the
+CommonLib and selected-feature submodules. `--display-name` only sets the
+README title and does not automatically bring in a menu.
 
-## 按需 feature
+## On-demand features
 
-可选模块位于 `templates/features/<name>/`。不传 `--features` 时仍生成上述最小模板。
+Optional modules live in `templates/features/<name>/`. Without `--features`
+the minimal template above is still generated.
 
 ```powershell
 python scripts/scaffold.py --name MyPlugin --features input --dir C:/work/MyPlugin
@@ -58,32 +108,53 @@ python scripts/scaffold.py --name MyPlugin --features config,input,menu --dir C:
 python scripts/scaffold.py --name MyPlugin --features render,shaders --dir C:/work/MyPlugin
 ```
 
-依赖自动补齐并去重，例如 input 自动包含 config；不会自动选择菜单或渲染。
-`--features none` 显式选择最小模板；`all` 适合验证全集，不是默认建议。
-每个 feature 包含 feature.json 和要复制到项目根目录的 src/cmake 子树。
-生成器同步接入文件、CMake、vcpkg、子模块、头文件和对应生命周期。
-输出目录仍必须为空；对已有项目按 manifest 逐项迁移，不覆盖现有代码。
-详见 [features.md](references/features.md)。
+Dependencies are completed and deduplicated automatically; for example
+`input` automatically includes `config`; menu or render are not selected
+automatically. `--features none` explicitly selects the minimal template;
+`all` suits validating the full set and is not the default recommendation.
+Each feature contains a feature.json plus the src/cmake subtree to copy into
+the project root. The generator wires up files, CMake, vcpkg, submodules,
+includes, and the corresponding lifecycle entries. The output directory must
+still be empty; for an existing project migrate item by item against the
+manifest instead of overwriting existing code. See
+[features.md](references/features.md) for details.
 
-## 三类参考
+## Three kinds of reference
 
-- [file-layout.md](references/file-layout.md)：按职责增加文件、控制入口文件和公共头的边界。
-- [build-and-verify.md](references/build-and-verify.md)：根 CMake 的组织、按需依赖/资源接入及验证。
-- [reuse-guide.md](references/reuse-guide.md)：选择参考代码、拆除业务耦合并保持接口与调用链一致。
-- [reference-project.md](references/reference-project.md)：参考工程的阅读入口及可学习的模式。
-- [multi-runtime.md](references/multi-runtime.md)：有引擎事件、hook、渲染或跨运行时需求时再读取。
+- [file-layout.md](references/file-layout.md): add files by responsibility;
+  keep entry-file and shared-header boundaries.
+- [build-and-verify.md](references/build-and-verify.md): root CMake
+  organization, on-demand dependency/asset wiring, and verification.
+- [reuse-guide.md](references/reuse-guide.md): select reference code, strip
+  business coupling, and keep interfaces and call chains consistent.
+- [reference-project.md](references/reference-project.md): reading entry into
+  the reference project and the patterns worth learning.
+- [multi-runtime.md](references/multi-runtime.md): read when the work involves
+  engine events, hooks, rendering, or cross-runtime concerns.
 
-“保持一致”指采用清晰的责任划分、构建组织和可追踪的适配方式。它不要求文件数量、
-模块集合、依赖列表、业务行为或代码哈希与参考工程相同。不要要求先修改参考工程才能
-修复目标项目，也不要用逐文件相等检查限制必要裁剪。
+"Staying consistent" means adopting clear responsibility boundaries, build
+organization, and traceable adaptation. It does not require matching the
+reference project's file count, module set, dependency list, business
+behavior, or code hashes. Do not require modifying the reference project
+before fixing the target project, and do not use file-by-file equality checks
+to block necessary trimming.
 
-## 校验 skill
+## Validating the skill
 
 ```powershell
 python scripts/test_scaffold.py
 python -X utf8 <skill-creator-root>/scripts/quick_validate.py <skill-directory>
 ```
 
-默认运行两个代表案例：最小插件边界，以及 config + shaders 的依赖和生成接入。只想验证一个受影响行为时，可直接指定 unittest 测试名；维护生成器依赖解析或发布前确有全量回归需要时，显式运行 `python scripts/test_scaffold.py --full`，不要把全量矩阵作为日常默认。
+By default run two representative cases: the minimal plugin boundary, and
+the config + shaders dependency and generation wiring. To verify a single
+affected behavior, pass the specific unittest test name; run
+`python scripts/test_scaffold.py --full` explicitly only when maintaining
+the generator's dependency resolution or when a full regression is genuinely
+needed before a release — do not make the full matrix the daily default.
 
-普通插件任务只选本次实际受影响的 1–2 个案例，不因使用模板而执行生成器全量测试。与 lightweight 组合时服从实现契约的 Verification 和 Codex 测试预算。编译、游戏内验证与未验证部分分别报告。
+Ordinary plugin tasks select only the 1–2 cases actually affected this time;
+using the template does not justify running the generator's full test suite.
+When combined with lightweight-coding-workflow, follow the Verification and
+Codex test budgets of the implementation contract. Report compilation,
+in-game verification, and unverified parts separately.

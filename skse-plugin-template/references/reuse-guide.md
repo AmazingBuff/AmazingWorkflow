@@ -1,50 +1,74 @@
-# 可复用代码：选择、裁剪、接入
+# Reusable code: select, trim, wire in
 
-## 选取前
+## Before selecting
 
-先写清“本功能需要它解决什么问题”。没有消费者的工具、管理器、状态类或子模块不要加入。
-阅读候选实现及其调用方，区分以下内容：
+First write down "what problem this feature needs it to solve". Do not add
+tools, managers, state classes, or submodules without a consumer. Read the
+candidate implementation and its callers, and distinguish:
 
-- 通用机制：例如消息监听、输入事件转换、COM 状态管理。
-- 插件约定：例如命名空间、日志别名、路径、字段命名。
-- 原业务耦合：例如尸体集合、轮廓 pass、过滤字段、QuickLoot 通知。
-- 生命周期与隐含前提：在哪个线程调用、何时对象存在、谁释放引用、是否允许重复注册。
+- Generic mechanisms: e.g. message listening, input event translation, COM
+  state management.
+- Plugin conventions: e.g. namespaces, log aliases, paths, field naming.
+- Original business coupling: e.g. corpse collection, outline pass, filter
+  fields, QuickLoot notifications.
+- Lifecycle and implicit preconditions: which thread calls it, when objects
+  exist, who releases references, whether duplicate registration is allowed.
 
-把这四类区分清楚后，才决定直接复用、提取一小段，还是针对当前需求重新实现。
+Decide whether to reuse directly, extract a small piece, or reimplement for
+the current need only after these four categories are separated.
 
-## 常见适配
+## Common adaptations
 
-### 配置
+### Configuration
 
-可以参考 Config + Setting 的职责安排。字段、默认值、校验和序列化只保留当前插件需要的
-部分。不要复制尸体距离、扫描周期、显示模式或一个当前没有输入功能的 hotkey。
-get_config 返回引用还是快照，取决于实际调用线程和修改方式；不要为了字面一致保留数据竞争。
-配置接口变化要同步所有消费者。发生文件 I/O/分配的函数不应盲目保留 noexcept。
+The Config + Setting responsibility arrangement can serve as a reference.
+Keep only the fields, defaults, validation, and serialization the current
+plugin needs. Do not copy corpse distance, scan period, display mode, or a
+hotkey with no current input feature. Whether get_config returns a reference
+or a snapshot depends on the actual calling thread and mutation style; do not
+keep a data race for the sake of literal consistency. Configuration interface
+changes must update all consumers together. Functions doing file I/O or
+allocation should not blindly keep noexcept.
 
-### 输入
+### Input
 
-只需响应游戏事件时，复用 BSInputDeviceManager/BSTEventSink 的接入方式。明确配置保存的是
-VK、扫描码还是游戏宏键码，再保留必要转换。事件源按游戏生命周期注册，处理重复注册、
-菜单/文本输入和用户需要的设备。删除源代码中没有对应功能的 Menu、PulseTimer 或配置依赖。
-输入不要求 Present hook，更不要求一并引入渲染系统。
+When only responding to game events, reuse the BSInputDeviceManager /
+BSTEventSink wiring approach. Determine whether the configuration stores VK
+codes, scan codes, or game macro key codes before keeping the necessary
+translation. Register event sources according to the game lifecycle, handling
+duplicate registration, menu/text input, and the devices the user needs.
+Delete Menu, PulseTimer, or configuration dependencies that have no
+corresponding feature in the source. Input does not require a Present hook,
+let alone pulling in the rendering system along with it.
 
-### 渲染工具
+### Rendering utilities
 
-只有功能确实要绘制时，再选 PresentHook、CommonStates、D3D11StateCapture、ShaderManager
-中的所需部分。Color/投影/hash/计时器独立判断，不能以“都是通用工具”为由整包复制。
-使用状态捕获时，核对当前 pass 改动的每个槽位与恢复范围；通用名称不等于覆盖所有状态。
-移除原有 pass、shader 成员和业务输入后，同步构造/析构、创建/释放路径及 CMake 依赖。
-不要留下空 draw 或无消费者的 shader 对来证明“结构完整”。
+Only when the feature really draws, select the needed parts among
+PresentHook, CommonStates, D3D11StateCapture, and ShaderManager. Judge
+Color/projection/hash/timer independently; "they are all generic utilities" is
+not a reason to copy the whole package. When using state capture, check every
+slot the current pass changes and the restore scope; a generic name does not
+mean it covers all states. After removing the original passes, shader
+members, and business inputs, update construction/destruction,
+creation/release paths, and CMake dependencies together. Do not leave an empty
+draw or consumer-less shader pairs to prove "structural completeness".
 
-### 菜单
+### Menu
 
-只有用户需要界面且选择 MCP 时才引入 SKSE-MCP。可以复用注册流程和设置回调，替换产品标题、
-控件字段及保存动作。不能保留一个仅改变按钮文案、没有实际重绑处理的交互并宣称它已实现。
-没有菜单功能时，输入和配置也不应依赖 Menu。
+Introduce SKSE-MCP only when the user needs a UI and chooses MCP. The
+registration flow and settings callbacks can be reused; replace the product
+title, control fields, and save action. Do not keep an interaction that only
+changes button text without actual rebind handling and claim it is
+implemented. Without a menu feature, input and configuration should not
+depend on Menu either.
 
-## 完成标准
+## Definition of done
 
-对每次复用说明：来源位置、保留的职责、删除的耦合、接口/生命周期的调整，以及实际验证。
-确保 include、CMake 依赖、入口初始化、运行时清理均与裁剪后的实现对应。
-没有必要逐字相同；必要的修复可以直接落在目标项目，不要求先改参考项目。
-保留来源版权/许可信息，避免把原作者身份填成新项目作者。
+For every reuse, state: source location, responsibilities kept, coupling
+removed, interface/lifecycle adjustments, and actual verification. Ensure
+includes, CMake dependencies, entry initialization, and runtime cleanup all
+correspond to the trimmed implementation. Literal identity is unnecessary;
+necessary fixes can land directly in the target project without requiring the
+reference project to change first. Preserve the original source's
+copyright/license information, and avoid filling the original author's
+identity in as the new project's author.

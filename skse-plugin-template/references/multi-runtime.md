@@ -1,18 +1,33 @@
-# 需要引擎集成时才检查运行时
+# Check the runtime only when engine integration is involved
 
-默认 CMake 提供 SE/AE/VR 开关，示例启用 SE/AE。这些开关和导出元数据不是跨运行时验证结果。
-先确定当前插件支持的实际版本，再检查选定 CommonLib、SKSE、Address Library 和相关布局。
+The default CMake provides SE/AE/VR switches, and the examples enable SE/AE.
+These switches and the export metadata are not cross-runtime verification
+results. Determine the actual versions the current plugin supports first, then
+check the selected CommonLib, SKSE, Address Library, and related layouts
+against the target runtime.
 
-新增引擎调用优先使用 CommonLib 的已存在接口。表地址可重定位不代表虚表槽位和调用约定
-跨版本相同；不要把参考项目的槽位、偏移或注释直接当成另一个目标版本的证据。
+For new engine calls, prefer CommonLib's existing interfaces. A relocatable
+table address does not mean the vtable slot and calling convention are the
+same across versions; do not treat the reference project's slots, offsets, or
+comments as evidence for another target version's branch.
 
-按模块实际需求选择消息时机。需要游戏数据时再注册消息监听器；若新游戏和读档都应生效，
-应覆盖两条路径；注册和 hook 的重复调用按实际生命周期处理。参考只处理某个消息，不表示
-目标项目也必须遗漏其他消息。没有相关模块时，不生成空的 message_handler。
+Choose message timing per module's actual needs. Register a message listener
+only when game data is required; if both a new game and a load should take
+effect, cover both paths; handle repeated registration of listeners and hooks
+according to the actual lifecycle. The reference handling only one message
+does not mean the target project must also omit the others. When no related
+module exists, do not generate an empty message_handler.
 
-对配置共享、事件 sink 生命周期、游戏对象引用、渲染线程、设备切换和 COM 资源分别确定
-责任。不能以“与参考实现一致”代替审查，也不需要为了潜在未来功能提前实现整套机制。
+Determine responsibility separately for configuration sharing, event sink
+lifecycle, game object references, the render thread, device change, and COM
+resources. Do not substitute "consistent with the reference implementation"
+for review, and do not implement a whole mechanism in advance for potential
+future features.
 
-最小模板保留参考的入口/元数据形式；添加具体功能后，重新核对 UsesNoStructs 等声明以及
-REL::Module::reset 这类版本相关 workaround 是否适用于所选依赖。编译成功只证明构建，
-实际回调、hook 和游戏行为仍需在声称支持的运行时验证。
+The minimal template keeps the reference's entry/metadata shape; after adding
+concrete features, re-check declarations such as UsesNoStructs and
+version-specific workarounds such as REL::Module::reset against the selected
+dependency branch, its maintenance status, license, and implementation
+differences. A successful compile only proves the build; actual callbacks,
+hooks, and game behavior still need verification on each runtime you claim to
+support.
