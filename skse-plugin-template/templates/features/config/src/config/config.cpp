@@ -40,12 +40,12 @@ void Setting::load()
     std::lock_guard file_lock(m_file_mutex);
     CSimpleIniA ini;
     ini.SetUnicode();
-    auto const path = get_config_path();
+    std::filesystem::path const path = get_config_path();
     if (ini.LoadFile(path.c_str()) < 0)
         logger::info("INI unavailable; using defaults");
     Config config = Default_Config;
     config.enabled = ini.GetBoolValue("General", "Enabled", config.enabled);
-    auto const key = ini.GetLongValue("General", "Hotkey", static_cast<long>(config.hotkey));
+    long const key = ini.GetLongValue("General", "Hotkey", static_cast<long>(config.hotkey));
     config.hotkey = key >= 0 && key <= 0xFE ? static_cast<uint32_t>(key) : 0u;
     std::lock_guard config_lock(m_config_mutex);
     m_config = config;
@@ -54,18 +54,29 @@ void Setting::load()
 void Setting::save()
 {
     std::lock_guard file_lock(m_file_mutex);
-    auto const path = get_config_path();
+    std::filesystem::path const path = get_config_path();
+    std::error_code ec;
     CSimpleIniA ini;
     ini.SetUnicode();
-    if (std::filesystem::exists(path) && ini.LoadFile(path.c_str()) < 0)
+    if (std::filesystem::exists(path, ec) && ini.LoadFile(path.c_str()) < 0)
     {
         logger::warn("Cannot read existing INI; refusing to overwrite it");
         return;
     }
-    auto const config = get_config();
+    if (ec)
+    {
+        logger::warn("Cannot inspect existing INI path ({}); refusing to overwrite it", ec.message());
+        return;
+    }
+    Config const config = get_config();
     ini.SetBoolValue("General", "Enabled", config.enabled);
     ini.SetLongValue("General", "Hotkey", static_cast<long>(config.hotkey));
-    std::filesystem::create_directories(path.parent_path());
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec)
+    {
+        logger::warn("Failed to create INI directory ({})", ec.message());
+        return;
+    }
     if (ini.SaveFile(path.c_str()) < 0)
         logger::warn("Failed to save INI");
 }

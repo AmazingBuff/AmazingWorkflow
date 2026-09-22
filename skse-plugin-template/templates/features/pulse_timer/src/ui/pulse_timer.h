@@ -12,9 +12,9 @@ class PulseTimer
 {
 public:
     PulseTimer(PulseTimer const&) = delete;
-    PulseTimer(PulseTimer const&&) = delete;
-    PulseTimer operator=(PulseTimer&) = delete;
-    PulseTimer operator=(PulseTimer&&) = delete;
+    PulseTimer(PulseTimer&&) = delete;
+    PulseTimer& operator=(PulseTimer const&) = delete;
+    PulseTimer& operator=(PulseTimer&&) = delete;
 
     static PulseTimer& instance();
 

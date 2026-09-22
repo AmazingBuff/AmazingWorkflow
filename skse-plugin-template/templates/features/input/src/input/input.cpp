@@ -1,7 +1,9 @@
 #include "input.h"
+
 #include "config/config.h"
-#include <Windows.h>
 {{INPUT_MENU_INCLUDE}}
+
+#include <Windows.h>
 
 PLUGIN_NAMESPACE_BEGIN
 
@@ -16,32 +18,25 @@ namespace
             return s_instance;
         }
 
-        RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* a_events,
+        RE::BSEventNotifyControl ProcessEvent(RE::InputEvent* const* events,
             RE::BSTEventSource<RE::InputEvent*>*) noexcept override
         {
-            try
+            if (!events)
+                return RE::BSEventNotifyControl::kContinue;
+            RE::UI* ui = RE::UI::GetSingleton();
+            if (!ui || ui->GameIsPaused())
+                return RE::BSEventNotifyControl::kContinue;
+            {{INPUT_MENU_GUARD}}
+            Config const config = Setting::instance().get_config();
+            if (config.hotkey == 0)
+                return RE::BSEventNotifyControl::kContinue;
+            UINT const scan_code = MapVirtualKeyA(config.hotkey, MAPVK_VK_TO_VSC);
+            for (RE::InputEvent* event = *events; event; event = event->next)
             {
-                if (!a_events)
-                    return RE::BSEventNotifyControl::kContinue;
-                auto* ui = RE::UI::GetSingleton();
-                if (!ui || ui->GameIsPaused())
-                    return RE::BSEventNotifyControl::kContinue;
-                {{INPUT_MENU_GUARD}}
-                auto const config = Setting::instance().get_config();
-                if (config.hotkey == 0)
-                    return RE::BSEventNotifyControl::kContinue;
-                auto const scan_code = MapVirtualKeyA(config.hotkey, MAPVK_VK_TO_VSC);
-                for (auto* event = *a_events; event; event = event->next)
-                {
-                    auto* button = event->AsButtonEvent();
-                    if (button && button->device.get() == RE::INPUT_DEVICE::kKeyboard &&
-                        button->IsDown() && scan_code != 0 && button->idCode == scan_code)
-                        Setting::instance().toggle();
-                }
-            }
-            catch (...)
-            {
-                try { logger::error("Input event failed"); } catch (...) {}
+                RE::ButtonEvent* button = event->AsButtonEvent();
+                if (button && button->device.get() == RE::INPUT_DEVICE::kKeyboard &&
+                    button->IsDown() && scan_code != 0 && button->idCode == scan_code)
+                    Setting::instance().toggle();
             }
             return RE::BSEventNotifyControl::kContinue;
         }
@@ -55,7 +50,7 @@ void InputManager::install()
     static bool s_installed = false;
     if (s_installed)
         return;
-    auto* source = RE::BSInputDeviceManager::GetSingleton();
+    RE::BSInputDeviceManager* source = RE::BSInputDeviceManager::GetSingleton();
     if (!source)
         return;
     source->AddEventSink(&InputHandler::instance());

@@ -29,13 +29,13 @@ public:
     [[nodiscard]] REX::W32::ID3D11PixelShader* overlay_ps() const noexcept { return m_overlay_ps; }
     [[nodiscard]] REX::W32::ID3DBlob* overlay_vs_blob() const noexcept { return m_overlay_vs_blob; }
 
-
 private:
     ShaderManager();
     ~ShaderManager();
 
     void release();
 
+private:
     REX::W32::ID3D11VertexShader* m_overlay_vs;
     REX::W32::ID3D11PixelShader* m_overlay_ps;
     REX::W32::ID3DBlob* m_overlay_vs_blob;

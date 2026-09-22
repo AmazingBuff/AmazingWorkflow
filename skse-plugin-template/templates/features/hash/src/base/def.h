@@ -20,26 +20,26 @@ constexpr size_t hash_str(T const* str, size_t const len, size_t const& seed)
     return hash;
 }
 
-template<typename Tp, typename... Rest>
-constexpr void hash_combine_mul(size_t& seed, const Tp& val, const Rest&... rest)
+template<typename T, typename... Rest>
+constexpr void hash_combine_mul(size_t& seed, T const& val, Rest const&... rest)
 {
-    if constexpr (std::is_convertible_v<Tp, size_t>)
+    if constexpr (std::is_convertible_v<T, size_t>)
         seed ^= (static_cast<size_t>(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
     else
-        seed ^= (std::hash<Tp>()(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+        seed ^= (std::hash<T>()(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
     (hash_combine_mul(seed, rest), ...);
 }
 
-template<typename Tp>
-constexpr size_t hash_combine(const size_t& seed, const Tp& val)
+template<typename T>
+constexpr size_t hash_combine(size_t const& seed, T const& val)
 {
-    if constexpr (std::is_convertible_v<Tp, size_t>)
+    if constexpr (std::is_convertible_v<T, size_t>)
         return seed ^ (static_cast<size_t>(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
     else
-        return seed ^ (std::hash<Tp>()(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+        return seed ^ (std::hash<T>()(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
 }
 
-inline size_t hash_combine(const size_t& seed, const void* mem, const size_t& length)
+inline size_t hash_combine(size_t const& seed, void const* mem, size_t const& length)
 {
     uint8_t const* bytes = static_cast<uint8_t const*>(mem);
     size_t hash = seed;

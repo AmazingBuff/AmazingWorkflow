@@ -149,7 +149,7 @@ CommonStates::CommonStates(REX::W32::ID3D11Device* device) :
               create_rasterizer_state(device, REX::W32::D3D11_CULL_NONE, REX::W32::D3D11_FILL_SOLID, true, &m_cull_none_scissor) &&
               create_rasterizer_state(device, REX::W32::D3D11_CULL_FRONT, REX::W32::D3D11_FILL_SOLID, false, &m_cull_clockwise) &&
               create_rasterizer_state(device, REX::W32::D3D11_CULL_BACK, REX::W32::D3D11_FILL_SOLID, false, &m_cull_counter_clockwise) &&
-              create_rasterizer_state(device, REX::W32::D3D11_CULL_NONE, REX::W32::D3D11_FILL_WIREFRAME,false, &m_wireframe) &&
+              create_rasterizer_state(device, REX::W32::D3D11_CULL_NONE, REX::W32::D3D11_FILL_WIREFRAME, false, &m_wireframe) &&
               create_sampler_state(device, REX::W32::D3D11_FILTER_MIN_MAG_MIP_POINT, REX::W32::D3D11_TEXTURE_ADDRESS_WRAP, &m_point_wrap) &&
               create_sampler_state(device, REX::W32::D3D11_FILTER_MIN_MAG_MIP_POINT, REX::W32::D3D11_TEXTURE_ADDRESS_CLAMP, &m_point_clamp) &&
               create_sampler_state(device, REX::W32::D3D11_FILTER_MIN_MAG_MIP_LINEAR, REX::W32::D3D11_TEXTURE_ADDRESS_WRAP, &m_linear_wrap) &&

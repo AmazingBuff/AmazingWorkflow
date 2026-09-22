@@ -75,21 +75,18 @@ def blocks(selected):
     handler=[]
     if data or ready or save:
         handler=['    void message_handler(SKSE::MessagingInterface::Message* message) noexcept',
-                 '    {','        if (!message)','            return;','        try','        {',
-                 '            switch (message->type)','            {']
+                 '    {','        if (!message)','            return;',
+                 '        switch (message->type)','        {']
         for labels,actions in ((['kDataLoaded'],data),(['kNewGame','kPostLoadGame'],ready),(['kSaveGame'],save)):
             if actions:
                 handler.extend('            case SKSE::MessagingInterface::'+label+':' for label in labels)
                 handler.extend('                '+action for action in actions)
                 handler.append('                break;')
-        handler.extend(['            default:','                break;','            }','        }',
-                        '        catch (...)','        {',
-                        '            try { logger::error("Feature message handler failed"); } catch (...) {}',
-                        '        }','    }'])
-    register=['auto* messaging = SKSE::GetMessagingInterface();',
-              'if (!messaging || !messaging->RegisterListener(message_handler))',
+        handler.extend(['            default:','                break;','        }','    }'])
+    register=['SKSE::MessagingInterface* messaging = SKSE::GetMessagingInterface();',
+              'if (!messaging || !messaging->RegisterListener(PLUGIN_NAMESPACE::message_handler))',
               '    return false;'] if handler else []
-    load_block=['try','{',*('    '+action for action in load),'}','catch (...)','{','    return false;','}'] if load else []
+    load_block=list(load)
     return {
         'FEATURE_INCLUDES':['#include "'+p+'"' for p in entries(selected,'includes')],
         'FEATURE_MESSAGE_HANDLER':handler,

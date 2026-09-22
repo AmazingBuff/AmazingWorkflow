@@ -7,6 +7,7 @@
 #pragma warning(pop)
 
 PLUGIN_NAMESPACE_BEGIN
+
 namespace
 {
     void render_settings()

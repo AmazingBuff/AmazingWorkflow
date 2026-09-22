@@ -5,6 +5,7 @@
 #include "pulse_timer.h"
 
 PLUGIN_NAMESPACE_BEGIN
+
 PulseTimer& PulseTimer::instance()
 {
     static PulseTimer s_instance;
@@ -37,7 +38,7 @@ float PulseTimer::progress()
     if (!m_active)
         return 1.0f;
 
-    auto const ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_start_time).count();
+    std::chrono::milliseconds::rep const ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_start_time).count();
     return ms > 0 ? static_cast<float>(ms) / static_cast<float>(m_duration_ms) : 0.f;
 }
 
