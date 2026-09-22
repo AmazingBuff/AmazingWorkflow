@@ -16,7 +16,7 @@ namespace
         Rect() : m_left(0.0f), m_right(0.0f), m_bottom(0.0f), m_top(0.0f) {}
 
         [[nodiscard]] float width() const noexcept { return m_right - m_left; }
-        [[nodiscard]] float height() const noexcept { return m_bottom - m_left; }
+        [[nodiscard]] float height() const noexcept { return m_bottom - m_top; }
 
         float& left() noexcept { return m_left; }
         float& right() noexcept { return m_right; }
