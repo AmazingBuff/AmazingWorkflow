@@ -35,9 +35,9 @@ description: Apply HLSL coding rules derived from the engine shaders and the bun
 | 其他普通全局变量 | 沿用 cpp-style 的 `g_`；不要用其代替资源类别前缀 |
 | 入口与语义 | 保留管线约定，如 `vs`、`ps`、`mipmap`、`SV_Position`、`SV_Target0` |
 
-HLSL 的数据结构字段是 shader IO / GPU 数据契约，使用样本的 `position`、`texcoord`，不套 C++ 类的 `m_`。`s_` 用于 sampler 是显式语言例外。局部常量采用 `float const threshold`，全局常量可用 `static float const Threshold`。
+HLSL 的数据结构字段是 shader IO / GPU 数据契约，使用样本的 `position`、`texcoord`，不套 C++ 类的 `m_`。`s_` 用于 sampler 是显式语言例外。局部常量采用 `const float threshold`，全局常量可用 `static const float Threshold`。
 
-不把 C++ 的类层次、RAII、指针、`std` 类型、`enum class`、designated initializer、`noexcept`、named cast 或强制命名空间搬进 HLSL。数值类型使用 `float`、`uint`、`int` 及其向量/矩阵；转换用 HLSL 构造式，如 `float2(thread_id.xy)`。GPU 数据结构只放字段，不用成员默认初始化，返回前填好真正被消费的输出。
+不把 C++ 的类层次、RAII、指针、`std` 类型、`enum class`、designated initializer、`noexcept`、named cast 或强制命名空间搬进 HLSL。数值类型使用 `float`、`uint`、`int` 及其向量/矩阵；转换用 HLSL 构造式，如 `float2(thread_id.xy)`。GPU 数据结构只放字段，不用成员默认初始化，返回前填好真正被消费的输出。不要使用 `Type const` 这种 `const` 后置的格式，hlsl编译器不支持这种语法。
 
 ## 文件与接口
 
