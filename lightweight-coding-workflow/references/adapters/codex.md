@@ -28,7 +28,7 @@ verified_on: "2026-09-03"
 
 Implementation dispatch eligibility: **yes**, only after contract/model approval and immediate capability revalidation. The optional PLAN-task dispatch mapping is now declared after the parent Planner's live forward-test evidence; its verified scope and remaining limits are recorded below.
 
-This adapter is the sole `VERIFIED` protocol `0.7` mapping. It implements the [Host Adapter Contract](../adapter-contract.md) for the [Core protocol](../protocol.md), carries feature-documentation evidence, and preserves the model-neutral custom Agents. The read-only PLAN-task capability is separately verified and is not implied by WORK dispatch.
+This adapter is a `VERIFIED` protocol `0.7` mapping for Codex. It implements the [Host Adapter Contract](../adapter-contract.md) for the [Core protocol](../protocol.md), carries feature-documentation evidence, and preserves the model-neutral custom Agents. Other hosts select their own compatible adapter. The read-only PLAN-task capability is separately verified and is not implied by WORK dispatch.
 
 Managed web research is not declared as a verified adapter capability in this
 revision. The PLAN envelope carries an explicit `managed-web-research` check

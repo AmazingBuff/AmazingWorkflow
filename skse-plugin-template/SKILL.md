@@ -43,6 +43,14 @@ tasks or repeated authorization for this process.
 
 ## PLAN external-research binding
 
+The PLAN, contract, and Evidence Packet requirements in this section apply
+only when lightweight-coding-workflow is active. When using this skill alone,
+verify the relevant runtime, API/ABI, maintenance, and license assumptions
+against sources and report the evidence concisely in the current task; do not
+require lightweight, a separate PLAN task, a contract, or an Evidence Packet.
+If evidence needed for an architectural decision is missing, explain that
+specific limitation before proceeding with the dependent implementation.
+
 The generic conditional `External Research Gate` belongs to
 `lightweight-coding-workflow`; this section binds Skyrim-specific triggers to
 that gate and does not create a second research policy. Mark research
@@ -53,7 +61,7 @@ between SE, AE, or VR runtimes, new dependencies, or copied third-party
 design. These triggers apply even when a local prototype exists if mature
 upstream or GitHub prior art is likely.
 
-The proposal and its Evidence Packet record the target runtime(s), CommonLib
+The proposal (and an Evidence Packet only when research is delegated) records the target runtime(s), CommonLib
 branch/version, upstream and implementation maintenance status, license and
 reuse status, and the relevant implementation differences. For low-level or
 non-trivial architecture, require authoritative CommonLib/SKSE evidence plus a

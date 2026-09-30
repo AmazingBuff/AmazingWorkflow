@@ -8,13 +8,13 @@ namespace
     class OverlayDirector
     {
     public:
-        static OverlayDirector& instance()
+        static OverlayDirector& instance() noexcept
         {
             static OverlayDirector s_instance;
             return s_instance;
         }
 
-        void on_present(REX::W32::IDXGISwapChain* swap_chain)
+        void on_present(REX::W32::IDXGISwapChain* swap_chain) noexcept
         {
             std::unique_lock draw_lock(m_draw_mutex, std::try_to_lock);
             if (!draw_lock.owns_lock() || !swap_chain)
@@ -33,15 +33,16 @@ namespace
     private:
         void draw([[maybe_unused]] REX::W32::IDXGISwapChain* swap_chain,
             [[maybe_unused]] REX::W32::ID3D11Device* device,
-            [[maybe_unused]] REX::W32::ID3D11DeviceContext* context)
+            [[maybe_unused]] REX::W32::ID3D11DeviceContext* context) noexcept
         {
             // Add project render passes here. No pipeline state is changed by the skeleton.
             // Use D3D11StateCapture around writes; extend its captured states for new passes.
+            // Keep added passes non-throwing; translate unavoidable library exceptions at the call site.
         }
         std::mutex m_draw_mutex;
     };
 
-    void present_callback(REX::W32::IDXGISwapChain* swap_chain)
+    void present_callback(REX::W32::IDXGISwapChain* swap_chain) noexcept
     {
         OverlayDirector::instance().on_present(swap_chain);
     }

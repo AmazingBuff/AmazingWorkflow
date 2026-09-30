@@ -8,7 +8,7 @@ PLUGIN_NAMESPACE_BEGIN
 class PresentHook
 {
 public:
-    using Callback = void (*)(REX::W32::IDXGISwapChain*);
+    using Callback = void (*)(REX::W32::IDXGISwapChain*) noexcept;
     static PresentHook& instance();
     PresentHook(PresentHook const&) = delete;
     PresentHook& operator=(PresentHook const&) = delete;

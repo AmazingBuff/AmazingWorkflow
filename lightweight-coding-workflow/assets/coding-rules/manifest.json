@@ -84,8 +84,8 @@
     },
     {
       "path": "small-project-hlsl-rules/SKILL.md",
-      "sha256": "11b75c3b219d30f6fe39073fcca71f6ff24dcefe05e222ec84ae7b95a747bc18",
-      "provenance": "Authored 2026-09-22 from engine/res/shader HLSL patterns, the bundled cpp-style baseline, and linked Microsoft compiler documentation; DX11 is a compatibility adaptation.",
+      "sha256": "ba5ad5e2099424a5905dfbd9b6fc207e26fe0a0e7efbf02d272a1ef467f07251",
+      "provenance": "Authored 2026-09-22 from engine/res/shader HLSL patterns, the bundled cpp-style baseline, and linked Microsoft compiler documentation; DX11 is a compatibility adaptation. HLSL const placement was corrected to prefix const on 2026-09-24; the manifest was synchronized on 2026-09-30.",
       "synchronization": "Review shader/compiler changes manually; preserve shared C++ style inheritance, target-specific binding rules, and the 1-2 case budget; update this hash with the component notes."
     }
   ]

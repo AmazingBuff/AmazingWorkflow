@@ -82,8 +82,15 @@ The menu only provides the already wired Enabled/Save controls; it does not
 contain unimplemented rebind buttons.
 
 render installs the Present callback idempotently at the same points;
-present_hook preserves the original function and contains plugin callback
-exceptions. shaders attempts compilation on DataLoaded; if the device is not
+present_hook preserves the original function and accepts only `noexcept`
+callbacks. It does not catch exceptions: throwing through the Present thunk
+terminates the process. The supplied render callback uses a non-blocking
+mutex attempt, checks renderer availability, and reaches an empty draw pass;
+it performs no shader compilation, file I/O, or resource allocation. New
+passes must preserve that non-throwing call chain. A `noexcept` declaration
+alone does not prove it: use error-returning APIs and translate unavoidable
+third-party exceptions locally under the C++ rules before returning to the
+callback. shaders attempts compilation on DataLoaded; if the device is not
 ready yet, the later actual consumer must call compile according to its device
 lifecycle. The state capture's scope, device recreation, window resize,
 events/threads, and runtime compatibility still need verification against the
