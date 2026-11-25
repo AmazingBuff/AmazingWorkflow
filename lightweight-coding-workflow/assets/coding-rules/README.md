@@ -41,7 +41,7 @@ SPW 原始版本保持不动；组合工作流只消费本目录版本。
 | `small-project-cpp-rules/SKILL.md` | “任务包”→“实现契约”（2 处）；`small-project-test-plan` 引用改为“由实现契约的 Acceptance criteria 与 Verification 章节决定”；`G4/G6` 门禁改为中性表述；“Harness 原生 loader 加载”→“随附提供”；“workflow 内置”→“lightweight 编排框架内置” |
 | `small-project-cpp-rules/references/testing-and-validation.md` | 首段同上口径：检查清单服务于契约 Verification；“`G6 TEST_PASS`”改为中性表述 |
 | `small-project-python-rules/SKILL.md` | “Harness 原生 loader 加载”→“随附提供”；“workflow 内置”→“lightweight 编排框架内置” |
-| `small-project-cpp-rules/references/cpp-style.md` | 保留包内既有风格修订；HLSL 引入时修正过期 manifest hash；随后明确 PCH 可包含实际使用的稳定第三方库头和版本/元数据生成头 |
+| `small-project-cpp-rules/references/cpp-style.md` | 保留包内既有风格修订；HLSL 引入时修正过期 manifest hash；明确 PCH 可包含实际使用的稳定第三方库头和版本/元数据生成头；补充嵌套控制流与 `case` 的大括号用法，以及表达式换行时的运算符位置。新增容器容量预留、缓冲复用和减少重复工作的规则。 |
 | `small-project-hlsl-rules/` | 新增共同规范、DX12/Vulkan 和 DX11 规则；明确 HLSL 对 C++ 基础风格的继承与例外 |
 
 ## 使用方式

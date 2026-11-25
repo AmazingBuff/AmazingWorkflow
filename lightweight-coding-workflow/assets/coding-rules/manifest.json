@@ -12,7 +12,7 @@
   "files": [
     {
       "path": "README.md",
-      "sha256": "fecfd2d882609244f2a77246262b42a80edfaee123fbc5dd8876cb67b5808fba",
+      "sha256": "b2141cf65a2db4c6bea8483ccd76f476739168bc726c019adca04092c06a1842",
       "provenance": "Authored in this package to describe the composite adaptation of the small-project workflow rules at git 5fb6ec0.",
       "synchronization": "Keep the component inventory, adaptation notes, manifest policy, and affected hashes synchronized in one reviewed change."
     },
@@ -36,8 +36,8 @@
     },
     {
       "path": "small-project-cpp-rules/references/cpp-style.md",
-      "sha256": "4be7de67cbcfebd971197cf1a0d2fb2dbb5d8ec3b98b2bb091e1a12daa53f045",
-      "provenance": "Adapted from SPW git 5fb6ec0 with package-local C++ style revisions and used as the HLSL inheritance baseline. PCH now explicitly permits stable third-party headers and generated version/metadata headers. 2026-09-22: added the avoid-try/catch error-handling rule (return values, error_code, or assertions; narrow exception only at third-party boundaries that cannot be avoided).",
+      "sha256": "dfa3de798674d132acd51373dbcfb305f96c8c50a0067e0b9c74333d53962cd8",
+      "provenance": "Adapted from SPW git 5fb6ec0 with package-local C++ style revisions and used as the HLSL inheritance baseline. PCH now explicitly permits stable third-party headers and generated version/metadata headers. 2026-09-22: added the avoid-try/catch error-handling rule (return values, error_code, or assertions; narrow exception only at third-party boundaries that cannot be avoided). Clarified brace usage for nested control flow and case scopes, and operator placement in multiline expressions. Added performance guidance for reserving container capacity before filling, reusing buffers, and reducing redundant work.",
       "synchronization": "Review C++ style changes manually and their effect on HLSL inheritance; keep the current file hash and adaptation notes synchronized."
     },
     {

@@ -9,6 +9,7 @@
 - 类型与接口
 - 多后端、friend 与配置结构体
 - 所有权与错误
+- 性能与内存分配
 - 注释与禁止项
 
 ## 适配原则
@@ -128,7 +129,9 @@ namespace project_name
 
 - 每级缩进 4 个空格，禁止 Tab；禁止行尾空格。
 - 逻辑段落之间留一行空行。
-- 绿地代码使用 Allman 大括号，并在同一文件内保持一致。多语句控制流必须使用大括号；单语句控制流可以省略大括号，但不得在同一逻辑分支中无理由混用两种形式。
+- 绿地代码使用 Allman 风格，并在同一文件内保持一致。
+- `if`、`else if`、`else` 的分支体和循环体包含多条语句时，必须使用大括号。即使只有一条语句，只要该语句本身是 `if`、`switch` 或循环，外层也必须使用大括号。其余单语句体可以省略大括号。
+- 同一条 `if` / `else if` / `else` 链中，符合省略条件的分支统一保留或统一省略大括号。
 
 ```cpp
 class Device
@@ -138,19 +141,19 @@ public:
     virtual ~Device() = default;
 };
 
-void process()
+void process(bool enabled, bool ready)
 {
-    if (condition)
-        do_onething();
-    else
+    if (enabled)
     {
-        do_something();
-        do_other();
+        if (ready)
+            submit();
     }
+    else
+        reset();
 }
 ```
 
-`switch` 中 `case` 需要局部变量时，块起始大括号单独占下一行，并与 `case` 标签保持同级缩进：
+- 在 `switch` 中，需要声明局部变量的 `case` 分支用大括号建立独立作用域。左右大括号各占一行，并与 `case` 标签对齐。
 
 ```cpp
 switch (value)
@@ -180,6 +183,13 @@ MyClass::MyClass(Arg const* arg, Info const& info) : m_arg(nullptr), m_handle(nu
 ```
 
 - 使用 `Type const*`、`Type* const`、`Type const&`，不要在同一模块混用 east/west const。
+- 表达式在连接操作数的运算符处换行时，将运算符留在上一行末尾，续行从下一个操作数开始。操作数可以是变量、字面量、函数调用或括号子表达式。
+
+```cpp
+bool const can_submit = queue_ready &&
+    has_pending_work() &&
+    (free_slots > 0 || allow_overflow);
+```
 
 ## 类型与接口
 
@@ -361,6 +371,32 @@ void library_destroy(LibraryHandle* handle) noexcept;
 - 避免使用 try / catch 的异常处理行为：失败通过返回值、`std::error_code` 或 assertion 传播，I/O 与系统调用优先选用不抛出的重载；声明为 `noexcept` 的边界内的整条调用链必须保证不抛出。
 - 只有第三方库在既有调用路径上强制抛出异常、且同一操作没有不抛出的替代接口时，才允许在该调用点局部使用 try / catch；捕获后必须转换为项目错误模型，禁止吞掉异常、禁止跨层捕获。
 - 不在内部偷偷加入全局锁；线程安全、线程亲和性和调用方同步责任必须成为类型或 API 合同的一部分。
+
+## 性能与内存分配
+
+### 容器容量
+
+- 批量填充容器时，如果能根据输入数量或可靠估计确定所需容量，在进入处理循环前一次性预留。向已有容器批量追加时，按追加后的总大小预留。
+- `std::vector::reserve()` 只预留容量，`size()` 保持不变。随后用 `push_back()` 或 `emplace_back()` 添加元素。需要按下标写入时，先用带元素数量的构造函数或 `resize()` 创建对应元素。
+- 容量无法合理估算时，沿用容器的默认增长策略。避免逐元素调用 `reserve(size() + 1)`，也避免为远超实际需要的理论上限预分配内存。
+- 批量拼接 `std::string` 时，可按预计长度调用 `reserve()`。批量插入 `std::unordered_map` 或 `std::unordered_set` 时，可按预计元素数调用 `reserve()`，减少中途的重哈希。
+
+每个输入生成一个结果时，可以直接用输入数量预留容量。
+
+```cpp
+std::vector<Result> results;
+results.reserve(inputs.size());
+
+for (Input const& input : inputs)
+    results.push_back(compute(input));
+```
+
+### 缓冲复用与重复工作
+
+- 同一处理流程每帧或每批都需要临时缓冲时，在现有所有权和生命周期内复用容器。`std::vector::clear()` 清除元素并保留容量，可减少下一批的分配。
+- 只读遍历现有数据时，优先使用 `const` 引用或合适的只读视图，例如 `std::span<T const>`，避免为遍历而复制整个容器。视图的使用范围不得超出底层数据的有效期。
+- 将结果不随迭代变化的计算或查找移到循环外，前提是输入和依赖状态在循环中保持不变，且提前执行不会改变可观察行为。
+- 引入缓存、内存池或自定义容器前，先用代表性负载确认瓶颈，再对比优化前后的耗时、分配次数或内存占用。
 
 ## 注释与禁止项
 
